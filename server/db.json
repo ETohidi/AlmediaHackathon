@@ -153,6 +153,11 @@
     "review_below_confidence": 0.55,
     "stale_below_confidence": 0.45
   },
+  "snapshots": [
+    { "id": "2026-05-18", "label": "May 18, 2026", "months_before_current": 2, "data_status": "modeled_history" },
+    { "id": "2026-06-18", "label": "June 18, 2026", "months_before_current": 1, "data_status": "modeled_history" },
+    { "id": "2026-07-18", "label": "July 18, 2026", "months_before_current": 0, "data_status": "current_estimate" }
+  ],
   "country_game_step7_seed_archive": [
     { "country_id": "DE", "game_id": "word-collect", "users": 65000 },
     { "country_id": "DE", "game_id": "office-cat", "users": 52000 },

@@ -20,6 +20,8 @@ The 30-day growth rates are modeled demonstration estimates, not reported Almedi
 
 Freshness is computed from each record's evidence age and confidence using the policy stored in `server/db.json`. `fresh`, `review`, and `stale` are operational attention states for the future agent; they are not claims published by Almedia.
 
+The May and June 2026 time-travel snapshots are modeled backward from July's country estimates using each country's modeled 30-day growth rate. Their confidence is reduced for every projected month. These snapshots demonstrate twin history and must not be described as observed historical Almedia data.
+
 ## Missing data
 
 No estimate is created when public evidence is insufficient. A zero or missing value is rendered without a fill. This is different from a reported count of zero.

@@ -66,6 +66,25 @@ const evaluateFreshness = (db, country, now = Date.now()) => {
   }
 }
 
+const getSnapshot = (db, snapshotId) =>
+  db.snapshots.find((snapshot) => snapshot.id === snapshotId) ?? db.snapshots.at(-1)
+
+const projectCountryToSnapshot = (country, snapshot) => {
+  const months = snapshot.months_before_current
+  if (months === 0) {
+    return { ...country, snapshot_id: snapshot.id, snapshot_status: snapshot.data_status }
+  }
+
+  return {
+    ...country,
+    total_users: Math.round(country.total_users / Math.pow(1 + country.growth_rate_30d, months)),
+    confidence: Math.max(0.3, Math.round((country.confidence - months * 0.04) * 100) / 100),
+    last_refreshed: `${snapshot.id}T10:00:00.000Z`,
+    snapshot_id: snapshot.id,
+    snapshot_status: snapshot.data_status,
+  }
+}
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
@@ -73,6 +92,11 @@ app.get('/health', (_req, res) => {
 app.get('/twin/games', (_req, res) => {
   const db = readDb()
   res.json(db.games)
+})
+
+app.get('/twin/snapshots', (_req, res) => {
+  const db = readDb()
+  res.json(db.snapshots)
 })
 
 app.get('/twin/meta', (_req, res) => {
@@ -105,9 +129,11 @@ app.get('/twin/attention', (_req, res) => {
   res.json({ count: countries.length, countries })
 })
 
-app.get('/twin/validation', (_req, res) => {
+app.get('/twin/validation', (req, res) => {
   const db = readDb()
-  const countries = db.countries.map((country) => {
+  const snapshot = getSnapshot(db, req.query.asOf)
+  const snapshotCountries = db.countries.map((country) => projectCountryToSnapshot(country, snapshot))
+  const countries = snapshotCountries.map((country) => {
     const gameUsers = allocateCountryGames(db, country).reduce((sum, game) => sum + game.users, 0)
     return {
       id: country.id,
@@ -118,7 +144,7 @@ app.get('/twin/validation', (_req, res) => {
   })
 
   const continentUsers = db.continents.map((continent) => {
-    const relevantCountries = db.countries.filter((country) => country.continent_id === continent.id)
+    const relevantCountries = snapshotCountries.filter((country) => country.continent_id === continent.id)
     const countryUsers = relevantCountries.reduce((sum, country) => sum + country.total_users, 0)
     const gameUsers = relevantCountries.reduce(
       (sum, country) => sum + allocateCountryGames(db, country).reduce((gameSum, game) => gameSum + game.users, 0),
@@ -134,6 +160,7 @@ app.get('/twin/validation', (_req, res) => {
   })
 
   res.json({
+    snapshot_id: snapshot.id,
     valid: countries.every((country) => country.matches) && continentUsers.every((continent) => continent.matches),
     countries,
     continents: continentUsers,
@@ -142,9 +169,12 @@ app.get('/twin/validation', (_req, res) => {
 
 app.get('/twin/continents', (_req, res) => {
   const db = readDb()
+  const snapshot = getSnapshot(db, _req.query.asOf)
 
   const payload = db.continents.map((continent) => {
-    const countries = db.countries.filter((country) => country.continent_id === continent.id)
+    const countries = db.countries
+      .filter((country) => country.continent_id === continent.id)
+      .map((country) => projectCountryToSnapshot(country, snapshot))
     const totalUsers = countries.reduce((sum, country) => sum + country.total_users, 0)
 
     const confidence =
@@ -173,6 +203,8 @@ app.get('/twin/continents', (_req, res) => {
       data_status: countries.length > 0 ? db.dataset.country_total_users_status : 'missing',
       source_ids: countries.length > 0 ? ['almedia-users-2026-06', 'almedia-rankings-2026-02'] : [],
       country_count: countries.length,
+      snapshot_id: snapshot.id,
+      snapshot_status: snapshot.data_status,
     }
   })
 
@@ -188,6 +220,7 @@ app.get('/twin/countries', (req, res) => {
   }
 
   const db = readDb()
+  const snapshot = getSnapshot(db, req.query.asOf)
   const continent = db.continents.find((entry) => entry.id === continentId)
 
   if (!continent) {
@@ -197,6 +230,7 @@ app.get('/twin/countries', (req, res) => {
 
   const payload = db.countries
     .filter((country) => country.continent_id === continentId)
+    .map((country) => projectCountryToSnapshot(country, snapshot))
     .map((country) => {
       return {
         id: country.id,
@@ -214,7 +248,11 @@ app.get('/twin/countries', (req, res) => {
       }
     })
 
-  res.json({ continent: { id: continent.id, name: continent.name }, countries: payload })
+  res.json({
+    snapshot: { id: snapshot.id, label: snapshot.label, data_status: snapshot.data_status },
+    continent: { id: continent.id, name: continent.name },
+    countries: payload,
+  })
 })
 
 app.listen(port, () => {
