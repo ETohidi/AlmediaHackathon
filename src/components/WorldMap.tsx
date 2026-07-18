@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { userColorScale } from '../lib/colorScale'
 
 const WORLD_BOUNDS: [[number, number], [number, number]] = [
   [-170, -60],
@@ -93,20 +94,14 @@ const continentFillColorExpression: any = [
   'case',
   ['==', ['get', 'total_users'], 0],
   'rgba(0, 0, 0, 0)',
-  ['match', ['get', 'id'],
-    'europe', '#1D9E75',
-    'north-america', '#D85A30',
-    'asia', '#BA7517',
-    'oceania', '#D4537E',
-    'rgba(0, 0, 0, 0)',
-  ],
+  userColorScale(69000, 941000),
 ]
 
 const continentFillOpacityExpression: any = [
   'case',
   ['==', ['get', 'total_users'], 0],
   0,
-  ['interpolate', ['linear'], ['coalesce', ['get', 'confidence'], 0.3], 0.3, 0.72, 0.65, 0.82, 1, 0.95],
+  ['interpolate', ['linear'], ['coalesce', ['get', 'confidence'], 0.3], 0.3, 0.35, 0.65, 0.72, 1, 1],
 ]
 
 const continentOutlineColor = '#4b5563'
