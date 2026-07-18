@@ -22,6 +22,7 @@ const approvedResearchEvidence = new Map()
 let proposalSequence = 0
 let researchSequence = 0
 let cogneeUnavailableUntil = 0
+let tavilyUnavailableUntil = 0
 const COGNEE_DATASETS = ['metagame-evidence', 'metagame-decisions']
 
 app.use(express.json())
@@ -41,13 +42,21 @@ const shouldResearch = (question) =>
 
 const searchTavily = async (query) => {
   if (!process.env.TAVILY_API_KEY) throw new Error('Tavily is not configured. Set TAVILY_API_KEY on the server.')
-  const response = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.TAVILY_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, search_depth: 'basic', max_results: 6, include_answer: false, include_raw_content: false }),
-  })
-  const payload = await response.json()
-  if (!response.ok) throw new Error(payload?.detail?.error ?? payload?.message ?? 'Tavily search failed.')
+  if (Date.now() < tavilyUnavailableUntil) throw new Error('Tavily is temporarily unavailable.')
+  let payload
+  try {
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      signal: AbortSignal.timeout(8_000),
+      headers: { Authorization: `Bearer ${process.env.TAVILY_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, search_depth: 'basic', max_results: 6, include_answer: false, include_raw_content: false }),
+    })
+    payload = await response.json()
+    if (!response.ok) throw new Error(payload?.detail?.error ?? payload?.message ?? 'Tavily search failed.')
+  } catch (error) {
+    tavilyUnavailableUntil = Date.now() + 60_000
+    throw error
+  }
   return (payload.results ?? [])
     .filter((result) => Number(result.score ?? 0) >= 0.5)
     .slice(0, 5)
@@ -63,11 +72,60 @@ const searchTavily = async (query) => {
     }))
 }
 
+const getLocalResearchSources = (query) => {
+  const db = readDb()
+  const terms = query.toLowerCase().split(/\W+/).filter((term) => term.length > 3)
+  const ranked = db.sources
+    .map((source) => ({ source, matches: terms.filter((term) => `${source.title} ${source.publisher} ${source.supports ?? ''}`.toLowerCase().includes(term)).length }))
+    .sort((left, right) => right.matches - left.matches)
+  return ranked.slice(0, 5).map(({ source, matches }, index) => ({
+    id: `source-${index + 1}`,
+    title: source.title,
+    url: source.url,
+    claim: source.supports ?? `Existing source from ${source.publisher}.`,
+    relevance: Math.min(1, 0.5 + matches * 0.1),
+    published_at: source.published_at ?? null,
+    retrieved_at: new Date().toISOString(),
+    status: 'local_source_catalog',
+  }))
+}
+
 const createResearchProposal = async (query) => {
-  const sources = await searchTavily(query)
-  const proposal = { id: `research-${++researchSequence}`, query, status: 'pending', created_at: new Date().toISOString(), sources }
+  let sources
+  let provider = 'tavily'
+  let fallbackReason = null
+  try {
+    sources = await searchTavily(query)
+  } catch (error) {
+    sources = getLocalResearchSources(query)
+    provider = 'local_catalog'
+    fallbackReason = error instanceof Error ? error.message : 'Tavily unavailable.'
+  }
+  const proposal = { id: `research-${++researchSequence}`, query, status: 'pending', created_at: new Date().toISOString(), sources, provider, fallback_reason: fallbackReason }
   pendingResearch.set(proposal.id, proposal)
   return proposal
+}
+
+const buildLocalChatAnswer = (question, economics) => {
+  const normalized = question.toLowerCase()
+  if (/new game|game.*add|add.*game/.test(normalized)) {
+    return 'I cannot determine that yet.\n\n- Candidate games and genres\n- Expected revenue, rewards, and completion rate\n- Onboarding cost\n- Retention and risk evidence'
+  }
+  if (/best.*margin|highest.*margin|most profitable|best game/.test(normalized)) {
+    const best = [...economics.games].sort((a, b) => b.contribution_margin - a.contribution_margin)[0]
+    return `${best.name} has the highest modeled margin.\n\n- Margin: ${(best.contribution_margin * 100).toFixed(1)}%\n- Monthly profit: $${best.monthly_profit_usd.toLocaleString('en-US')}\n- Risk score: ${best.risk_score}/100\n\nModeled estimate`
+  }
+  if (/infrastructure|latency|capacity|upgrade/.test(normalized)) {
+    const viable = economics.infrastructure_cases.filter((entry) => entry.estimated_payback_months != null).sort((a, b) => a.estimated_payback_months - b.estimated_payback_months)
+    if (!viable.length) return 'No infrastructure upgrade has a positive modeled payback yet.\n\nModeled estimate'
+    const best = viable[0]
+    return `${best.country_name} is the strongest modeled upgrade case.\n\n- Revenue at risk: $${best.monthly_revenue_at_risk_usd.toLocaleString('en-US')}/month\n- Payback: ${best.estimated_payback_months} months\n- Confidence: ${Math.round(best.confidence * 100)}%\n\nModeled estimate`
+  }
+  if (/revenue|reward|profit|economics|money|cost/.test(normalized)) {
+    const totals = economics.totals
+    return `Modeled monthly contribution profit is $${totals.monthly_profit_usd.toLocaleString('en-US')}.\n\n- Advertiser revenue: $${totals.advertiser_revenue_usd.toLocaleString('en-US')}\n- User rewards: $${totals.user_rewards_usd.toLocaleString('en-US')}\n- Variable costs: $${totals.variable_costs_usd.toLocaleString('en-US')}\n\nModeled estimate`
+  }
+  return 'I can answer from the local twin about users, game economics, growth potential, latency, capacity, onboarding, and risk. Current web research is temporarily unavailable.'
 }
 
 const cogneeRequest = async (pathname, options = {}) => {
@@ -330,17 +388,20 @@ app.get('/twin/memory/status', (_req, res) => {
   res.json({ configured: Boolean(process.env.COGNEE_API_KEY), base_url: process.env.COGNEE_BASE_URL ?? 'https://api.cognee.ai', temporarily_unavailable: Date.now() < cogneeUnavailableUntil, datasets: COGNEE_DATASETS })
 })
 
+app.get('/twin/services/status', (_req, res) => {
+  res.json({
+    openai: { configured: Boolean(process.env.OPENAI_API_KEY), fallback: 'deterministic_twin' },
+    tavily: { configured: Boolean(process.env.TAVILY_API_KEY), temporarily_unavailable: Date.now() < tavilyUnavailableUntil, fallback: 'local_source_catalog' },
+    cognee: { configured: Boolean(process.env.COGNEE_API_KEY), temporarily_unavailable: Date.now() < cogneeUnavailableUntil, fallback: 'runtime_approved_evidence' },
+  })
+})
+
 app.post('/twin/agent/chat', async (req, res) => {
   const question = req.body?.message
   if (typeof question !== 'string' || !question.trim() || question.length > 2000) {
     res.status(400).json({ error: 'A message of at most 2,000 characters is required.' })
     return
   }
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(503).json({ error: 'OpenAI is not configured. Set OPENAI_API_KEY on the server.' })
-    return
-  }
-
   const db = readDb()
   const economics = buildBusinessModel(db)
   let research = null
@@ -357,6 +418,10 @@ app.post('/twin/agent/chat', async (req, res) => {
     approved_web_evidence: [...approvedResearchEvidence.values()].flatMap((entry) => entry.sources),
     pending_web_evidence: research?.sources ?? [],
     cognee_memory: await recallFromCognee(question),
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    res.json({ answer: buildLocalChatAnswer(question, economics), model: 'deterministic-twin', data_status: 'local_fallback', research, service_mode: 'fallback' })
+    return
   }
   try {
     const response = await fetch('https://api.openai.com/v1/responses', {
@@ -383,9 +448,10 @@ Never present modeled values as actual Almedia financials. Distinguish known, mo
     const payload = await response.json()
     if (!response.ok) throw new Error(payload?.error?.message ?? 'OpenAI request failed')
     const answer = payload.output_text ?? payload.output?.flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text
-    res.json({ answer: answer ?? 'The model returned no text.', model: payload.model, data_status: 'model_interpretation_of_twin', research })
+    res.json({ answer: answer ?? buildLocalChatAnswer(question, economics), model: payload.model, data_status: 'model_interpretation_of_twin', research, service_mode: answer ? 'primary' : 'fallback' })
   } catch (error) {
-    res.status(502).json({ error: error instanceof Error ? error.message : 'OpenAI request failed.' })
+    console.warn(`OpenAI unavailable; using deterministic fallback: ${error instanceof Error ? error.message : 'unknown error'}`)
+    res.json({ answer: buildLocalChatAnswer(question, economics), model: 'deterministic-twin', data_status: 'local_fallback', research, service_mode: 'fallback' })
   }
 })
 

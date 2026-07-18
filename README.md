@@ -32,6 +32,8 @@ Set `TAVILY_API_KEY` in the same ignored `.env` to enable current web research. 
 
 Set `COGNEE_API_KEY` and the tenant-specific `COGNEE_BASE_URL` to persist approved/rejected research decisions. Cognee is agent memory only; the JSON database remains authoritative. Failed memory writes are marked for retry and never block an approval decision.
 
+All external services degrade safely: OpenAI falls back to deterministic twin answers, Tavily to the local source catalog, and Cognee to runtime approved evidence. Credit exhaustion, rate limits, timeouts, or missing credentials do not interrupt the map or chat.
+
 ## Current API
 
 - `GET /health`
@@ -44,6 +46,7 @@ Set `COGNEE_API_KEY` and the tenant-specific `COGNEE_BASE_URL` to persist approv
 - `POST /twin/research/:id/reject` — reject pending evidence
 - `GET /twin/memory/status` — Cognee configuration and availability state
 - `POST /twin/memory/retry/:id` — retry a failed Cognee memory write
+- `GET /twin/services/status` — primary-service and fallback availability
 - `GET /twin/snapshots` — available modeled twin-history dates
 - `GET /twin/attention` — countries requiring freshness or confidence review
 - `POST /twin/refresh/propose` — deterministic country refresh proposal
