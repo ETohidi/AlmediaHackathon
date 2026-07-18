@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { buildSeedCountryGeoJson } from '../lib/countryGeometry'
 import { userColorScale } from '../lib/colorScale'
 
 const WORLD_BOUNDS: [[number, number], [number, number]] = [
@@ -30,6 +31,14 @@ type ContinentMetric = {
   label_lat?: number
   total_users: number
   confidence: number | null
+}
+
+type CountryMetric = {
+  id: string
+  name: string
+  continent_id: string
+  total_users: number
+  confidence: number
 }
 
 type GeoJsonFeature = {
@@ -105,6 +114,15 @@ const continentFillOpacityExpression: any = [
 ]
 
 const continentOutlineColor = '#4b5563'
+
+const countryFillOpacityExpression: any = [
+  'case',
+  ['==', ['get', 'total_users'], 0],
+  0,
+  ['interpolate', ['linear'], ['coalesce', ['get', 'confidence'], 0.3], 0.3, 0.35, 0.65, 0.72, 1, 1],
+]
+
+const seedCountryGeoJson = buildSeedCountryGeoJson()
 
 const buildLabelFeatureCollection = (features: GeoJsonFeature[], metrics: ContinentMetric[]) => {
   const anchorsById = new Map(metrics.map((entry) => [entry.id, [entry.label_lng, entry.label_lat] as const]))
@@ -190,6 +208,44 @@ const fetchMapData = async () => {
   }
 }
 
+const fetchContinentCountries = async (continentId: string) => {
+  const response = await fetch(`/twin/countries?continent=${encodeURIComponent(continentId)}`)
+
+  if (!response.ok) {
+    throw new Error(`Failed to load countries for continent: ${continentId}`)
+  }
+
+  const payload = (await response.json()) as { countries: CountryMetric[] }
+  return payload.countries
+}
+
+const buildCountryFeatureCollection = (countryMetrics: CountryMetric[]) => {
+  const metricsById = new Map(countryMetrics.map((entry) => [entry.id, entry]))
+
+  const features = seedCountryGeoJson.features
+    .filter((feature) => metricsById.has(String(feature.properties?.id ?? '')))
+    .map((feature) => {
+      const countryId = String(feature.properties?.id ?? '')
+      const metric = metricsById.get(countryId)
+
+      return {
+        ...feature,
+        properties: {
+          ...feature.properties,
+          id: countryId,
+          name: metric?.name ?? String(feature.properties?.name ?? countryId),
+          total_users: metric?.total_users ?? 0,
+          confidence: metric?.confidence ?? 0,
+        },
+      }
+    })
+
+  return {
+    type: 'FeatureCollection' as const,
+    features,
+  }
+}
+
 export function WorldMap() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -224,6 +280,14 @@ export function WorldMap() {
         },
       })
 
+      map.addSource('countries', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: [],
+        },
+      })
+
       map.addLayer({
         id: 'continents-fill',
         type: 'fill',
@@ -247,6 +311,33 @@ export function WorldMap() {
             0.72,
             0.2,
           ],
+        },
+      })
+
+      map.addLayer({
+        id: 'countries-fill',
+        type: 'fill',
+        source: 'countries',
+        layout: {
+          visibility: 'none',
+        },
+        paint: {
+          'fill-color': 'rgba(0, 0, 0, 0)',
+          'fill-opacity': countryFillOpacityExpression,
+        },
+      })
+
+      map.addLayer({
+        id: 'countries-outline',
+        type: 'line',
+        source: 'countries',
+        layout: {
+          visibility: 'none',
+        },
+        paint: {
+          'line-color': '#7f8ca3',
+          'line-width': 0.8,
+          'line-opacity': 0.85,
         },
       })
 
@@ -279,6 +370,13 @@ export function WorldMap() {
           return
         }
 
+        const continentId = String(clickedFeature.properties?.id ?? '')
+        if (!continentId) {
+          return
+        }
+
+        const countriesRequest = fetchContinentCountries(continentId)
+
         const geometryBounds = getBoundsFromGeometry(clickedFeature.geometry)
         if (!geometryBounds) {
           return
@@ -286,6 +384,34 @@ export function WorldMap() {
 
         const camera = map.cameraForBounds(geometryBounds.bounds, {
           padding: { top: 72, right: 72, bottom: 72, left: 72 },
+        })
+
+        map.once('moveend', () => {
+          countriesRequest
+            .then((countryMetrics) => {
+              const countrySource = map.getSource('countries') as GeoJSONSource | undefined
+              const countryFeatureCollection = buildCountryFeatureCollection(countryMetrics)
+              countrySource?.setData(countryFeatureCollection as any)
+
+              const nonZeroUsers = countryMetrics.map((entry) => entry.total_users).filter((value) => value > 0)
+              const minUsers = nonZeroUsers.length ? Math.min(...nonZeroUsers) : 0
+              const maxUsers = nonZeroUsers.length ? Math.max(...nonZeroUsers) : 1
+              const safeMaxUsers = maxUsers <= minUsers ? minUsers + 1 : maxUsers
+
+              map.setPaintProperty('countries-fill', 'fill-color', [
+                'case',
+                ['==', ['get', 'total_users'], 0],
+                'rgba(0, 0, 0, 0)',
+                userColorScale(minUsers, safeMaxUsers),
+              ] as any)
+
+              map.setLayoutProperty('continents-fill', 'visibility', 'none')
+              map.setLayoutProperty('countries-fill', 'visibility', 'visible')
+              map.setLayoutProperty('countries-outline', 'visibility', 'visible')
+            })
+            .catch((error) => {
+              console.error(error)
+            })
         })
 
         map.flyTo({
