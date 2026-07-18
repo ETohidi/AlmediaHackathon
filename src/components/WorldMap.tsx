@@ -21,7 +21,7 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
       id: 'background',
       type: 'background',
       paint: {
-        'background-color': '#0d0d0f',
+        'background-color': '#071a2b',
       },
     },
   ],
@@ -356,11 +356,11 @@ const applyCountryColoring = (
           '#ef4444',
         ]
       : mapMode === 'potential'
-        ? potentialScale
-        : userConfidenceColorScale(minUsers, safeMaxUsers, 'display_users')
+        ? ['case', ['==', ['get', 'potential_users'], 0], '#26323d', potentialScale]
+        : ['case', ['==', ['get', 'display_users'], 0], '#26323d', userConfidenceColorScale(minUsers, safeMaxUsers, 'display_users')]
 
   map.setPaintProperty('countries-fill', 'fill-color', colorExpression as any)
-  map.setPaintProperty('countries-fill', 'fill-opacity', mapMode === 'capacity' ? 0.82 : countryFillOpacityExpression)
+  map.setPaintProperty('countries-fill', 'fill-opacity', mapMode === 'capacity' ? 0.82 : 0.94)
 }
 
 const applyContinentColoring = (
@@ -382,11 +382,12 @@ const applyContinentColoring = (
   const minPotential = potentialValues.length ? Math.min(...potentialValues) : 0
   const maxPotential = potentialValues.length ? Math.max(...potentialValues) : 1
   const colorExpression = mapMode === 'capacity'
-    ? ['interpolate', ['linear'], ['get', 'latency_ms'], 100, '#14b8a6', 225, '#f59e0b', 400, '#ef4444']
+    ? ['case', ['==', ['get', 'total_users'], 0], '#26323d', ['interpolate', ['linear'], ['get', 'latency_ms'], 100, '#14b8a6', 225, '#f59e0b', 400, '#ef4444']]
     : mapMode === 'potential'
-      ? userConfidenceColorScale(minPotential, maxPotential <= minPotential ? minPotential + 1 : maxPotential, 'potential_users')
-      : userConfidenceColorScale(minUsers, safeMaxUsers)
+      ? ['case', ['==', ['get', 'potential_users'], 0], '#26323d', userConfidenceColorScale(minPotential, maxPotential <= minPotential ? minPotential + 1 : maxPotential, 'potential_users')]
+      : ['case', ['==', ['get', 'total_users'], 0], '#26323d', userConfidenceColorScale(minUsers, safeMaxUsers)]
   map.setPaintProperty('continents-fill', 'fill-color', colorExpression as any)
+  map.setPaintProperty('continents-fill', 'fill-opacity', mapMode === 'capacity' ? 0.82 : 0.94)
 
   const labelSource = map.getSource('continent-labels') as GeoJSONSource | undefined
   labelSource?.setData(continentLabels as any)
@@ -780,9 +781,9 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
 
     map.on('load', () => {
       map.setSky({
-        'sky-color': '#05070d',
-        'horizon-color': '#1e293b',
-        'fog-color': '#0f172a',
+        'sky-color': '#030509',
+        'horizon-color': '#102235',
+        'fog-color': '#071a2b',
         'fog-ground-blend': 0.55,
         'atmosphere-blend': 0.9,
       })
@@ -807,6 +808,16 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
         data: {
           type: 'FeatureCollection',
           features: [],
+        },
+      })
+
+      map.addLayer({
+        id: 'land-base',
+        type: 'fill',
+        source: 'continents',
+        paint: {
+          'fill-color': '#1c2833',
+          'fill-opacity': 1,
         },
       })
 
@@ -1144,6 +1155,7 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
   return (
     <>
       <div ref={containerRef} className="h-full w-full" aria-label="World map" />
+      {!isCountryZoom ? <div className="metagame-stars" aria-hidden="true" /> : null}
       {mapMode !== 'users' ? (
         <div className="fixed bottom-5 left-4 z-20 rounded-lg border border-slate-700/70 bg-slate-950/90 px-3 py-2 text-xs text-slate-300 shadow-lg backdrop-blur">
           <span className="font-semibold text-amber-300">Modeled</span>

@@ -7,6 +7,21 @@ body,
   min-height: 100%;
 }
 
+.metagame-stars {
+  position: fixed;
+  inset: 48px 0 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.32;
+  background-image:
+    radial-gradient(circle, rgb(226 232 240 / 75%) 0 0.7px, transparent 0.9px),
+    radial-gradient(circle, rgb(125 211 252 / 55%) 0 0.6px, transparent 0.8px);
+  background-position: 13px 19px, 57px 43px;
+  background-size: 83px 79px, 127px 113px;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent 0 34%, black 41%);
+  mask-image: radial-gradient(circle at 50% 50%, transparent 0 34%, black 41%);
+}
+
 .metagame-popup .maplibregl-popup-content {
   min-width: 190px;
   border: 1px solid rgb(71 85 105 / 70%);
