@@ -31,7 +31,7 @@ export function BusinessChat() {
     setMessages((current) => current.map((entry, index) => index === messageIndex ? { ...entry, researchStatus: action === 'apply' ? 'approved' : 'rejected', memoryStatus: payload.memory?.status } : entry))
   }
 
-  if (!open) return <button type="button" onClick={() => setOpen(true)} className="fixed bottom-5 right-5 z-40 rounded-full border border-teal-400/50 bg-slate-950/95 px-5 py-3 text-sm font-semibold text-teal-100 shadow-xl backdrop-blur hover:bg-slate-900">Ask business twin</button>
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className="fixed bottom-5 right-5 z-40 rounded-full border border-teal-400/50 bg-slate-950/95 px-5 py-3 text-sm font-semibold text-teal-100 shadow-xl backdrop-blur hover:bg-slate-900">Ask MetaGame</button>
   return (
     <aside className="fixed bottom-4 right-4 top-16 z-40 flex w-[min(25rem,calc(100vw-2rem))] flex-col rounded-xl border border-slate-700/70 bg-slate-950/95 text-slate-100 shadow-2xl backdrop-blur-md">
       <div className="flex items-start justify-between border-b border-slate-800 p-4"><div><p className="text-xs uppercase tracking-[0.16em] text-teal-300">MetaGame chat</p><h2 className="mt-1 font-semibold">Ask the digital twin</h2></div><button type="button" onClick={() => setOpen(false)} className="rounded px-2 text-xl text-slate-400 hover:text-white" aria-label="Close MetaGame chat">×</button></div>
