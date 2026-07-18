@@ -746,7 +746,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
         }
 
         const camera = map.cameraForBounds(geometryBounds.bounds, {
-          padding: { top: 72, right: 72, bottom: 72, left: 72 },
+          padding: { top: 56, right: 24, bottom: 24, left: 24 },
         })
 
         map.once('moveend', () => {
