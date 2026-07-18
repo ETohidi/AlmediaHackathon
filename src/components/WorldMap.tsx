@@ -31,6 +31,7 @@ type ContinentMetric = {
   label_lat?: number
   total_users: number
   confidence: number | null
+  growth_rate_30d: number | null
 }
 
 type CountryMetric = {
@@ -39,6 +40,7 @@ type CountryMetric = {
   continent_id: string
   total_users: number
   confidence: number
+  growth_rate_30d: number
   games: Array<{
     id: string
     name: string
@@ -174,6 +176,7 @@ const mergeMetricsIntoGeoJson = (geoJson: GeoJsonFeatureCollection, metrics: Con
         name,
         total_users: metric?.total_users ?? 0,
         confidence: metric?.confidence ?? 0,
+        growth_rate_30d: metric?.growth_rate_30d ?? null,
       },
     }
   })
@@ -248,6 +251,7 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilt
           total_users: metric?.total_users ?? 0,
           display_users: displayUsers,
           confidence: metric?.confidence ?? 0,
+          growth_rate_30d: metric?.growth_rate_30d ?? 0,
         },
       }
     })
@@ -275,6 +279,54 @@ const applyCountryColoring = (map: MapLibreMap, countryMetrics: CountryMetric[],
     'rgba(0, 0, 0, 0)',
     userConfidenceColorScale(minUsers, safeMaxUsers, 'display_users'),
   ] as any)
+}
+
+const numberFormatter = new Intl.NumberFormat('en-US')
+
+const buildPopupContent = (properties: Record<string, any>) => {
+  const container = document.createElement('div')
+  const title = document.createElement('div')
+  title.textContent = String(properties.name ?? 'Unknown')
+  title.style.fontSize = '14px'
+  title.style.fontWeight = '700'
+  title.style.marginBottom = '8px'
+  container.appendChild(title)
+
+  const rows = [
+    ['Users', numberFormatter.format(Number(properties.display_users ?? properties.total_users ?? 0))],
+    [
+      'Growth (30d)',
+      properties.growth_rate_30d == null
+        ? 'Unknown'
+        : `${Number(properties.growth_rate_30d) >= 0 ? '+' : ''}${(Number(properties.growth_rate_30d) * 100).toFixed(1)}%`,
+    ],
+    [
+      'Certainty',
+      properties.confidence == null ? 'Unknown' : `${Math.round(Number(properties.confidence) * 100)}%`,
+    ],
+  ]
+
+  for (const [label, value] of rows) {
+    const row = document.createElement('div')
+    row.style.display = 'flex'
+    row.style.justifyContent = 'space-between'
+    row.style.gap = '18px'
+    row.style.fontSize = '12px'
+    row.style.lineHeight = '20px'
+
+    const labelElement = document.createElement('span')
+    labelElement.textContent = label
+    labelElement.style.color = '#94a3b8'
+
+    const valueElement = document.createElement('span')
+    valueElement.textContent = value
+    valueElement.style.fontWeight = '600'
+
+    row.append(labelElement, valueElement)
+    container.appendChild(row)
+  }
+
+  return container
 }
 
 type WorldMapProps = {
@@ -307,6 +359,12 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
       interactive: true,
       attributionControl: false,
       renderWorldCopies: false,
+    })
+    const hoverPopup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 12,
+      className: 'metagame-popup',
     })
 
     map.on('load', () => {
@@ -405,6 +463,25 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
         },
       })
 
+      map.addLayer({
+        id: 'country-labels',
+        type: 'symbol',
+        source: 'countries',
+        layout: {
+          visibility: 'none',
+          'text-field': ['get', 'name'],
+          'text-size': 11,
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#f1f5f9',
+          'text-halo-color': '#0d0d0f',
+          'text-halo-width': 1.5,
+        },
+      })
+
       map.fitBounds(WORLD_BOUNDS, {
         padding: { top: 48, right: 48, bottom: 48, left: 48 },
         duration: 0,
@@ -439,8 +516,10 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
               applyCountryColoring(map, countryMetrics, gameFilterRef.current)
 
               map.setLayoutProperty('continents-fill', 'visibility', 'none')
+              map.setLayoutProperty('continent-labels', 'visibility', 'none')
               map.setLayoutProperty('countries-fill', 'visibility', 'visible')
               map.setLayoutProperty('countries-outline', 'visibility', 'visible')
+              map.setLayoutProperty('country-labels', 'visibility', 'visible')
               setIsCountryZoom(true)
             })
             .catch((error) => {
@@ -462,8 +541,30 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
         map.getCanvas().style.cursor = 'pointer'
       })
 
+      map.on('mousemove', 'continents-fill', (event) => {
+        const feature = event.features?.[0]
+        if (!feature?.properties) return
+        hoverPopup.setLngLat(event.lngLat).setDOMContent(buildPopupContent(feature.properties)).addTo(map)
+      })
+
       map.on('mouseleave', 'continents-fill', () => {
         map.getCanvas().style.cursor = ''
+        hoverPopup.remove()
+      })
+
+      map.on('mouseenter', 'countries-fill', () => {
+        map.getCanvas().style.cursor = 'default'
+      })
+
+      map.on('mousemove', 'countries-fill', (event) => {
+        const feature = event.features?.[0]
+        if (!feature?.properties) return
+        hoverPopup.setLngLat(event.lngLat).setDOMContent(buildPopupContent(feature.properties)).addTo(map)
+      })
+
+      map.on('mouseleave', 'countries-fill', () => {
+        map.getCanvas().style.cursor = ''
+        hoverPopup.remove()
       })
 
       fetchMapData()
@@ -508,9 +609,11 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
 
     map.setLayoutProperty('countries-fill', 'visibility', 'none')
     map.setLayoutProperty('countries-outline', 'visibility', 'none')
+    map.setLayoutProperty('country-labels', 'visibility', 'none')
 
     map.once('moveend', () => {
       map.setLayoutProperty('continents-fill', 'visibility', 'visible')
+      map.setLayoutProperty('continent-labels', 'visibility', 'visible')
       setIsCountryZoom(false)
     })
 

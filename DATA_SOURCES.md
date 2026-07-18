@@ -16,6 +16,8 @@ The public sources available for MetaGame do not disclose exact Freecash user to
 
 The ordering of country estimates follows published App Store rank evidence. Game allocations use the `regional-game-mix-v1` model stored in `server/db.json`. Its regional weights cover all seven sourced games and sum to 100% in every supported continent. The API uses remainder-safe integer allocation, so every country's game estimates add exactly to its country estimate. These modeled values should be replaced if first-party country-level campaign data becomes available.
 
+The 30-day growth rates are modeled demonstration estimates, not reported Almedia growth figures. Continent growth is calculated as the user-weighted average of its available country growth estimates.
+
 ## Missing data
 
 No estimate is created when public evidence is insufficient. A zero or missing value is rendered without a fill. This is different from a reported count of zero.

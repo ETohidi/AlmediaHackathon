@@ -6,3 +6,19 @@ body,
   margin: 0;
   min-height: 100%;
 }
+
+.metagame-popup .maplibregl-popup-content {
+  min-width: 190px;
+  border: 1px solid rgb(71 85 105 / 70%);
+  border-radius: 10px;
+  background: rgb(15 23 42 / 94%);
+  padding: 12px 14px;
+  color: #e2e8f0;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+  backdrop-filter: blur(8px);
+}
+
+.metagame-popup .maplibregl-popup-tip {
+  border-top-color: rgb(15 23 42 / 94%);
+  border-bottom-color: rgb(15 23 42 / 94%);
+}

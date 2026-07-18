@@ -101,6 +101,10 @@ app.get('/twin/continents', (_req, res) => {
 
     const confidence =
       countries.length > 0 ? countries.reduce((sum, country) => sum + country.confidence, 0) / countries.length : null
+    const growthRate =
+      totalUsers > 0
+        ? countries.reduce((sum, country) => sum + country.growth_rate_30d * country.total_users, 0) / totalUsers
+        : null
 
     return {
       id: continent.id,
@@ -109,6 +113,8 @@ app.get('/twin/continents', (_req, res) => {
       label_lat: continent.label_lat,
       total_users: totalUsers,
       confidence,
+      growth_rate_30d: growthRate,
+      growth_rate_status: countries.length > 0 ? db.dataset.growth_rate_status : 'missing',
       data_status: countries.length > 0 ? db.dataset.country_total_users_status : 'missing',
       source_ids: countries.length > 0 ? ['almedia-users-2026-06', 'almedia-rankings-2026-02'] : [],
       country_count: countries.length,
@@ -143,6 +149,8 @@ app.get('/twin/countries', (req, res) => {
         continent_id: country.continent_id,
         total_users: country.total_users,
         confidence: country.confidence,
+        growth_rate_30d: country.growth_rate_30d,
+        growth_rate_status: db.dataset.growth_rate_status,
         last_refreshed: country.last_refreshed,
         data_status: country.data_status ?? db.dataset.country_total_users_status,
         source_ids: country.source_ids ?? ['almedia-users-2026-06', 'almedia-rankings-2026-02'],
