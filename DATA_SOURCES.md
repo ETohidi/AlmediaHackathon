@@ -30,6 +30,8 @@ Business economics are scenario calculations rather than Almedia accounts. Publi
 
 Tavily results are runtime research evidence, not trusted database facts. Results retain their URL, title, relevance, retrieval time, and extracted claim. They remain pending until explicitly approved, and approval adds evidence to the agent context without changing numeric twin records.
 
+Cognee stores long-term agent memory for approved evidence and rejected-source decisions. Retrieved memory is supporting context, not authoritative state, and cannot overwrite the JSON twin. Memory writes that fail remain explicitly pending for retry.
+
 ## Missing data
 
 No estimate is created when public evidence is insufficient. A zero or missing value is rendered without a fill. This is different from a reported count of zero.

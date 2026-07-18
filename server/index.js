@@ -21,6 +21,8 @@ const pendingResearch = new Map()
 const approvedResearchEvidence = new Map()
 let proposalSequence = 0
 let researchSequence = 0
+let cogneeUnavailableUntil = 0
+const COGNEE_DATASETS = ['metagame-evidence', 'metagame-decisions']
 
 app.use(express.json())
 
@@ -65,6 +67,67 @@ const createResearchProposal = async (query) => {
   const sources = await searchTavily(query)
   const proposal = { id: `research-${++researchSequence}`, query, status: 'pending', created_at: new Date().toISOString(), sources }
   pendingResearch.set(proposal.id, proposal)
+  return proposal
+}
+
+const cogneeRequest = async (pathname, options = {}) => {
+  if (!process.env.COGNEE_API_KEY) throw new Error('Cognee is not configured.')
+  if (Date.now() < cogneeUnavailableUntil) throw new Error('Cognee is temporarily unavailable.')
+  const baseUrl = (process.env.COGNEE_BASE_URL ?? 'https://api.cognee.ai').replace(/\/$/, '')
+  try {
+    const response = await fetch(`${baseUrl}${pathname}`, {
+      ...options,
+      signal: AbortSignal.timeout(8_000),
+      headers: { 'X-Api-Key': process.env.COGNEE_API_KEY, ...(options.headers ?? {}) },
+    })
+    const text = await response.text()
+    const payload = text ? JSON.parse(text) : {}
+    if (!response.ok) throw new Error(payload?.detail?.error ?? payload?.detail ?? `Cognee returned ${response.status}.`)
+    return payload
+  } catch (error) {
+    cogneeUnavailableUntil = Date.now() + 60_000
+    throw error
+  }
+}
+
+const rememberInCognee = async (memory, datasetName) => {
+  const form = new FormData()
+  form.append('data', new Blob([JSON.stringify(memory)], { type: 'application/json' }), `${memory.id}.json`)
+  form.append('datasetName', datasetName)
+  form.append('run_in_background', 'true')
+  return cogneeRequest('/api/v1/remember', { method: 'POST', body: form })
+}
+
+const recallFromCognee = async (query) => {
+  try {
+    const payload = await cogneeRequest('/api/v1/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, search_type: 'CHUNKS', datasets: COGNEE_DATASETS, top_k: 6, only_context: true }),
+    })
+    return Array.isArray(payload) ? payload : []
+  } catch (error) {
+    console.warn(`Cognee recall unavailable: ${error instanceof Error ? error.message : 'unknown error'}`)
+    return []
+  }
+}
+
+const syncResearchMemory = async (proposal) => {
+  const memory = {
+    id: proposal.id,
+    type: proposal.status === 'approved' ? 'approved_web_evidence' : 'rejected_web_evidence',
+    decision: proposal.status,
+    query: proposal.query,
+    decided_at: proposal.approved_at ?? proposal.rejected_at,
+    sources: proposal.sources,
+    instruction: proposal.status === 'rejected' ? 'Do not use these sources as approved evidence.' : 'Evidence was approved for future retrieval; numeric twin values were not changed.',
+  }
+  try {
+    await rememberInCognee(memory, proposal.status === 'approved' ? 'metagame-evidence' : 'metagame-decisions')
+    proposal.memory = { provider: 'cognee', status: 'syncing', synced_at: new Date().toISOString() }
+  } catch (error) {
+    proposal.memory = { provider: 'cognee', status: 'pending_retry', error: error instanceof Error ? error.message : 'Cognee sync failed.' }
+  }
   return proposal
 }
 
@@ -230,7 +293,7 @@ app.post('/twin/research/propose', async (req, res) => {
   }
 })
 
-app.post('/twin/research/:id/apply', (req, res) => {
+app.post('/twin/research/:id/apply', async (req, res) => {
   const proposal = pendingResearch.get(req.params.id)
   if (!proposal || proposal.status !== 'pending') {
     res.status(404).json({ error: 'Pending research proposal not found.' })
@@ -239,10 +302,10 @@ app.post('/twin/research/:id/apply', (req, res) => {
   proposal.status = 'approved'; proposal.approved_at = new Date().toISOString()
   approvedResearchEvidence.set(proposal.id, proposal)
   pendingResearch.set(proposal.id, proposal)
-  res.json(proposal)
+  res.json(await syncResearchMemory(proposal))
 })
 
-app.post('/twin/research/:id/reject', (req, res) => {
+app.post('/twin/research/:id/reject', async (req, res) => {
   const proposal = pendingResearch.get(req.params.id)
   if (!proposal || proposal.status !== 'pending') {
     res.status(404).json({ error: 'Pending research proposal not found.' })
@@ -250,7 +313,21 @@ app.post('/twin/research/:id/reject', (req, res) => {
   }
   proposal.status = 'rejected'; proposal.rejected_at = new Date().toISOString()
   pendingResearch.set(proposal.id, proposal)
-  res.json(proposal)
+  res.json(await syncResearchMemory(proposal))
+})
+
+app.post('/twin/memory/retry/:id', async (req, res) => {
+  const proposal = pendingResearch.get(req.params.id)
+  if (!proposal || !['approved', 'rejected'].includes(proposal.status)) {
+    res.status(404).json({ error: 'Reviewed research proposal not found.' })
+    return
+  }
+  cogneeUnavailableUntil = 0
+  res.json(await syncResearchMemory(proposal))
+})
+
+app.get('/twin/memory/status', (_req, res) => {
+  res.json({ configured: Boolean(process.env.COGNEE_API_KEY), base_url: process.env.COGNEE_BASE_URL ?? 'https://api.cognee.ai', temporarily_unavailable: Date.now() < cogneeUnavailableUntil, datasets: COGNEE_DATASETS })
 })
 
 app.post('/twin/agent/chat', async (req, res) => {
@@ -279,6 +356,7 @@ app.post('/twin/agent/chat', async (req, res) => {
     infrastructure: db.country_infrastructure,
     approved_web_evidence: [...approvedResearchEvidence.values()].flatMap((entry) => entry.sources),
     pending_web_evidence: research?.sources ?? [],
+    cognee_memory: await recallFromCognee(question),
   }
   try {
     const response = await fetch('https://api.openai.com/v1/responses', {

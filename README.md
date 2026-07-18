@@ -30,6 +30,8 @@ Copy `.env.example` to `.env`, set `OPENAI_API_KEY`, and export it before starti
 
 Set `TAVILY_API_KEY` in the same ignored `.env` to enable current web research. Search results remain pending evidence until a user approves them; approval does not automatically change numeric twin records.
 
+Set `COGNEE_API_KEY` and the tenant-specific `COGNEE_BASE_URL` to persist approved/rejected research decisions. Cognee is agent memory only; the JSON database remains authoritative. Failed memory writes are marked for retry and never block an approval decision.
+
 ## Current API
 
 - `GET /health`
@@ -40,6 +42,8 @@ Set `TAVILY_API_KEY` in the same ignored `.env` to enable current web research. 
 - `POST /twin/research/propose` — create a cited Tavily evidence proposal
 - `POST /twin/research/:id/apply` — approve evidence for runtime agent context
 - `POST /twin/research/:id/reject` — reject pending evidence
+- `GET /twin/memory/status` — Cognee configuration and availability state
+- `POST /twin/memory/retry/:id` — retry a failed Cognee memory write
 - `GET /twin/snapshots` — available modeled twin-history dates
 - `GET /twin/attention` — countries requiring freshness or confidence review
 - `POST /twin/refresh/propose` — deterministic country refresh proposal
