@@ -585,18 +585,23 @@ app.get('/twin/validation', (req, res) => {
 app.get('/twin/continents', (_req, res) => {
   const db = readDb()
   const snapshot = getSnapshot(db, _req.query.asOf)
+  const requestedGame = typeof _req.query.game === 'string' ? _req.query.game : 'all'
+  const gameFilter = requestedGame === 'all' || db.games.some((game) => game.id === requestedGame) ? requestedGame : 'all'
 
   const payload = db.continents.map((continent) => {
     const countries = db.countries
       .filter((country) => country.continent_id === continent.id)
       .map((country) => projectCountryToSnapshot(country, snapshot))
-    const totalUsers = countries.reduce((sum, country) => sum + country.total_users, 0)
+    const usersForCountry = (country) => gameFilter === 'all'
+      ? country.total_users
+      : allocateCountryGames(db, country).find((game) => game.id === gameFilter)?.users ?? 0
+    const totalUsers = countries.reduce((sum, country) => sum + usersForCountry(country), 0)
 
     const confidence =
       countries.length > 0 ? countries.reduce((sum, country) => sum + country.confidence, 0) / countries.length : null
     const growthRate =
       totalUsers > 0
-        ? countries.reduce((sum, country) => sum + country.growth_rate_30d * country.total_users, 0) / totalUsers
+        ? countries.reduce((sum, country) => sum + country.growth_rate_30d * usersForCountry(country), 0) / totalUsers
         : null
     const freshnessValues = countries.map((country) => evaluateFreshness(db, country))
     const freshness = freshnessValues.length
@@ -620,8 +625,12 @@ app.get('/twin/continents', (_req, res) => {
       country_count: countries.length,
       snapshot_id: snapshot.id,
       snapshot_status: snapshot.data_status,
+      game_filter: gameFilter,
       potential: {
-        untapped_users: countries.reduce((sum, country) => sum + getPotential(db, country).untapped_users, 0),
+        untapped_users: countries.reduce((sum, country) => {
+          const share = country.total_users > 0 ? usersForCountry(country) / country.total_users : 0
+          return sum + Math.round(getPotential(db, country).untapped_users * share)
+        }, 0),
         score: countries.length
           ? Math.round(countries.reduce((sum, country) => sum + getPotential(db, country).score, 0) / countries.length)
           : 0,

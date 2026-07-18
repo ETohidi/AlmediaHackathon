@@ -227,10 +227,10 @@ const mergeMetricsIntoGeoJson = (geoJson: GeoJsonFeatureCollection, metrics: Con
   }
 }
 
-const fetchMapData = async (snapshotId: string) => {
+const fetchMapData = async (snapshotId: string, gameFilter: GameFilter) => {
   const [continentsResponse, metricsResponse] = await Promise.all([
     fetch('/continents.geojson'),
-    fetch(`/twin/continents?asOf=${encodeURIComponent(snapshotId)}`),
+    fetch(`/twin/continents?asOf=${encodeURIComponent(snapshotId)}&game=${encodeURIComponent(gameFilter)}`),
   ])
 
   if (!continentsResponse.ok) {
@@ -683,16 +683,18 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
   useEffect(() => {
     gameFilterRef.current = gameFilter
     const map = mapRef.current
-    if (map?.isStyleLoaded() && countryMetricsRef.current.length) {
-      applyCountryColoring(map, countryMetricsRef.current, gameFilter, mapModeRef.current)
-    }
+    if (!map?.isStyleLoaded()) return
+    fetchMapData(snapshotRef.current, gameFilter).then(({ enrichedContinents, continentLabels }) =>
+      applyContinentColoring(map, enrichedContinents, continentLabels, mapModeRef.current),
+    ).catch(console.error)
+    if (countryMetricsRef.current.length) applyCountryColoring(map, countryMetricsRef.current, gameFilter, mapModeRef.current)
   }, [gameFilter])
 
   useEffect(() => {
     mapModeRef.current = mapMode
     const map = mapRef.current
     if (!map?.isStyleLoaded()) return
-    fetchMapData(snapshotRef.current).then(({ enrichedContinents, continentLabels }) =>
+    fetchMapData(snapshotRef.current, gameFilterRef.current).then(({ enrichedContinents, continentLabels }) =>
       applyContinentColoring(map, enrichedContinents, continentLabels, mapMode),
     ).catch(console.error)
     if (countryMetricsRef.current.length) {
@@ -707,7 +709,7 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
     const map = mapRef.current
     if (!map?.isStyleLoaded()) return
 
-    fetchMapData(snapshotId)
+    fetchMapData(snapshotId, gameFilterRef.current)
       .then(({ enrichedContinents, continentLabels }) => {
         applyContinentColoring(map, enrichedContinents, continentLabels, mapModeRef.current)
       })
@@ -1017,7 +1019,7 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
         hoverPopup.remove()
       })
 
-      fetchMapData(snapshotRef.current)
+      fetchMapData(snapshotRef.current, gameFilterRef.current)
         .then(({ enrichedContinents, continentLabels }) => {
           applyContinentColoring(map, enrichedContinents, continentLabels, mapModeRef.current)
         })
@@ -1044,7 +1046,7 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
     if (!map || !continentId) return
 
     const [{ enrichedContinents, continentLabels }, countryMetrics] = await Promise.all([
-      fetchMapData(snapshotId),
+      fetchMapData(snapshotId, gameFilterRef.current),
       fetchContinentCountries(continentId, snapshotId),
     ])
 
