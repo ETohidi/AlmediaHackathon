@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { buildSeedCountryGeoJson } from '../lib/countryGeometry'
@@ -249,6 +249,7 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[]) => {
 export function WorldMap() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
+  const [isCountryZoom, setIsCountryZoom] = useState(false)
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -408,6 +409,7 @@ export function WorldMap() {
               map.setLayoutProperty('continents-fill', 'visibility', 'none')
               map.setLayoutProperty('countries-fill', 'visibility', 'visible')
               map.setLayoutProperty('countries-outline', 'visibility', 'visible')
+              setIsCountryZoom(true)
             })
             .catch((error) => {
               console.error(error)
@@ -453,5 +455,38 @@ export function WorldMap() {
     }
   }, [])
 
-  return <div ref={containerRef} className="h-full w-full" aria-label="World map" />
+  const handleBackToWorld = () => {
+    const map = mapRef.current
+    if (!map || !isCountryZoom) {
+      return
+    }
+
+    map.setLayoutProperty('countries-fill', 'visibility', 'none')
+    map.setLayoutProperty('countries-outline', 'visibility', 'none')
+
+    map.once('moveend', () => {
+      map.setLayoutProperty('continents-fill', 'visibility', 'visible')
+      setIsCountryZoom(false)
+    })
+
+    map.fitBounds(WORLD_BOUNDS, {
+      padding: { top: 48, right: 48, bottom: 48, left: 48 },
+      duration: 1400,
+    })
+  }
+
+  return (
+    <>
+      <div ref={containerRef} className="h-full w-full" aria-label="World map" />
+      {isCountryZoom ? (
+        <button
+          type="button"
+          onClick={handleBackToWorld}
+          className="fixed bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full border border-slate-500/50 bg-slate-900/90 px-5 py-2 text-sm font-semibold text-slate-100 shadow-lg backdrop-blur hover:bg-slate-800"
+        >
+          Back to world view
+        </button>
+      ) : null}
+    </>
+  )
 }
