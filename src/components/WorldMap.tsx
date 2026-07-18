@@ -41,10 +41,16 @@ type CountryMetric = {
   total_users: number
   confidence: number
   growth_rate_30d: number
+  growth_rate_status: string
+  last_refreshed: string
+  data_status: string
+  source_ids: string[]
   games: Array<{
     id: string
     name: string
     users: number
+    share: number
+    data_status: string
   }>
 }
 
@@ -283,6 +289,12 @@ const applyCountryColoring = (map: MapLibreMap, countryMetrics: CountryMetric[],
 
 const numberFormatter = new Intl.NumberFormat('en-US')
 
+const formatStatus = (status: string) =>
+  status
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+
 const buildPopupContent = (properties: Record<string, any>) => {
   const container = document.createElement('div')
   const title = document.createElement('div')
@@ -333,12 +345,97 @@ type WorldMapProps = {
   gameFilter: GameFilter
 }
 
+type CountryDetailPanelProps = {
+  country: CountryMetric
+  gameFilter: GameFilter
+  onClose: () => void
+}
+
+function CountryDetailPanel({ country, gameFilter, onClose }: CountryDetailPanelProps) {
+  return (
+    <aside className="fixed bottom-4 right-4 top-16 z-30 w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-slate-700/70 bg-slate-950/95 p-5 text-slate-100 shadow-2xl backdrop-blur-md">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Country detail</p>
+          <h2 className="mt-1 text-xl font-semibold">{country.name}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close country detail"
+          className="rounded-md px-2 py-1 text-xl leading-none text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+        >
+          ×
+        </button>
+      </div>
+
+      <dl className="mt-5 grid grid-cols-2 gap-3">
+        <div className="rounded-lg bg-slate-900/80 p-3">
+          <dt className="text-xs text-slate-400">Estimated users</dt>
+          <dd className="mt-1 text-lg font-semibold">{numberFormatter.format(country.total_users)}</dd>
+        </div>
+        <div className="rounded-lg bg-slate-900/80 p-3">
+          <dt className="text-xs text-slate-400">30-day growth</dt>
+          <dd className="mt-1 text-lg font-semibold">
+            {country.growth_rate_30d >= 0 ? '+' : ''}
+            {(country.growth_rate_30d * 100).toFixed(1)}%
+          </dd>
+        </div>
+        <div className="rounded-lg bg-slate-900/80 p-3">
+          <dt className="text-xs text-slate-400">Certainty</dt>
+          <dd className="mt-1 text-lg font-semibold">{Math.round(country.confidence * 100)}%</dd>
+        </div>
+        <div className="rounded-lg bg-slate-900/80 p-3">
+          <dt className="text-xs text-slate-400">Evidence</dt>
+          <dd className="mt-1 text-sm font-semibold">{formatStatus(country.data_status)}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-5 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Game distribution</h3>
+        <span className="text-xs text-slate-500">Modeled</span>
+      </div>
+
+      <div className="mt-2 space-y-2">
+        {country.games.map((game) => {
+          const isActive = gameFilter === game.id
+          return (
+            <div
+              key={game.id}
+              className={`rounded-lg border px-3 py-2 ${
+                isActive ? 'border-violet-400/70 bg-violet-950/50' : 'border-slate-800 bg-slate-900/60'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium">{game.name}</span>
+                <span>{numberFormatter.format(game.users)}</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-teal-500 to-violet-600"
+                  style={{ width: `${game.share * 100}%` }}
+                />
+              </div>
+              <div className="mt-1 text-right text-xs text-slate-500">{(game.share * 100).toFixed(1)}%</div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-5 border-t border-slate-800 pt-3 text-xs text-slate-500">
+        Last refreshed {new Date(country.last_refreshed).toLocaleString()}
+      </div>
+    </aside>
+  )
+}
+
 export function WorldMap({ gameFilter }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const countryMetricsRef = useRef<CountryMetric[]>([])
   const gameFilterRef = useRef(gameFilter)
   const [isCountryZoom, setIsCountryZoom] = useState(false)
+  const [selectedCountry, setSelectedCountry] = useState<CountryMetric | null>(null)
 
   useEffect(() => {
     gameFilterRef.current = gameFilter
@@ -553,7 +650,13 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
       })
 
       map.on('mouseenter', 'countries-fill', () => {
-        map.getCanvas().style.cursor = 'default'
+        map.getCanvas().style.cursor = 'pointer'
+      })
+
+      map.on('click', 'countries-fill', (event) => {
+        const countryId = String(event.features?.[0]?.properties?.id ?? '')
+        const country = countryMetricsRef.current.find((entry) => entry.id === countryId)
+        if (country) setSelectedCountry(country)
       })
 
       map.on('mousemove', 'countries-fill', (event) => {
@@ -610,6 +713,7 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
     map.setLayoutProperty('countries-fill', 'visibility', 'none')
     map.setLayoutProperty('countries-outline', 'visibility', 'none')
     map.setLayoutProperty('country-labels', 'visibility', 'none')
+    setSelectedCountry(null)
 
     map.once('moveend', () => {
       map.setLayoutProperty('continents-fill', 'visibility', 'visible')
@@ -634,6 +738,13 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
         >
           Back to world view
         </button>
+      ) : null}
+      {selectedCountry ? (
+        <CountryDetailPanel
+          country={selectedCountry}
+          gameFilter={gameFilter}
+          onClose={() => setSelectedCountry(null)}
+        />
       ) : null}
     </>
   )
