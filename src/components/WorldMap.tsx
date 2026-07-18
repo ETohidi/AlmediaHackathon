@@ -32,6 +32,13 @@ type ContinentMetric = {
   total_users: number
   confidence: number | null
   growth_rate_30d: number | null
+  freshness: FreshnessMetric
+}
+
+type FreshnessMetric = {
+  status: 'fresh' | 'review' | 'stale' | 'missing'
+  age_days: number | null
+  reasons: string[]
 }
 
 type CountryMetric = {
@@ -45,6 +52,7 @@ type CountryMetric = {
   last_refreshed: string
   data_status: string
   source_ids: string[]
+  freshness: FreshnessMetric
   games: Array<{
     id: string
     name: string
@@ -183,6 +191,8 @@ const mergeMetricsIntoGeoJson = (geoJson: GeoJsonFeatureCollection, metrics: Con
         total_users: metric?.total_users ?? 0,
         confidence: metric?.confidence ?? 0,
         growth_rate_30d: metric?.growth_rate_30d ?? null,
+        freshness_status: metric?.freshness.status ?? 'missing',
+        freshness_age_days: metric?.freshness.age_days ?? null,
       },
     }
   })
@@ -258,6 +268,8 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilt
           display_users: displayUsers,
           confidence: metric?.confidence ?? 0,
           growth_rate_30d: metric?.growth_rate_30d ?? 0,
+          freshness_status: metric?.freshness.status ?? 'missing',
+          freshness_age_days: metric?.freshness.age_days ?? null,
         },
       }
     })
@@ -316,6 +328,7 @@ const buildPopupContent = (properties: Record<string, any>) => {
       'Certainty',
       properties.confidence == null ? 'Unknown' : `${Math.round(Number(properties.confidence) * 100)}%`,
     ],
+    ['Freshness', formatStatus(String(properties.freshness_status ?? 'missing'))],
   ]
 
   for (const [label, value] of rows) {
@@ -388,6 +401,16 @@ function CountryDetailPanel({ country, gameFilter, onClose }: CountryDetailPanel
         <div className="rounded-lg bg-slate-900/80 p-3">
           <dt className="text-xs text-slate-400">Evidence</dt>
           <dd className="mt-1 text-sm font-semibold">{formatStatus(country.data_status)}</dd>
+        </div>
+        <div className="rounded-lg bg-slate-900/80 p-3">
+          <dt className="text-xs text-slate-400">Freshness</dt>
+          <dd className="mt-1 text-sm font-semibold">{formatStatus(country.freshness.status)}</dd>
+        </div>
+        <div className="rounded-lg bg-slate-900/80 p-3">
+          <dt className="text-xs text-slate-400">Evidence age</dt>
+          <dd className="mt-1 text-sm font-semibold">
+            {country.freshness.age_days == null ? 'Unknown' : `${country.freshness.age_days.toFixed(1)} days`}
+          </dd>
         </div>
       </dl>
 
@@ -504,12 +527,24 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
         type: 'line',
         source: 'continents',
         paint: {
-          'line-color': continentOutlineColor,
+          'line-color': [
+            'match',
+            ['get', 'freshness_status'],
+            'stale',
+            '#f87171',
+            'review',
+            '#fbbf24',
+            continentOutlineColor,
+          ],
           'line-width': 1,
           'line-opacity': [
             'case',
             ['==', ['get', 'total_users'], 0],
             0.72,
+            ['==', ['get', 'freshness_status'], 'stale'],
+            0.9,
+            ['==', ['get', 'freshness_status'], 'review'],
+            0.65,
             0.2,
           ],
         },
@@ -536,7 +571,15 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
           visibility: 'none',
         },
         paint: {
-          'line-color': '#7f8ca3',
+          'line-color': [
+            'match',
+            ['get', 'freshness_status'],
+            'stale',
+            '#f87171',
+            'review',
+            '#fbbf24',
+            '#7f8ca3',
+          ],
           'line-width': 0.8,
           'line-opacity': 0.85,
         },

@@ -29,6 +29,7 @@ Open the local URL printed by Vite, normally `http://localhost:5173`.
 - `GET /health`
 - `GET /twin/meta` — dataset methodology and source catalog
 - `GET /twin/games` — sourced game catalog
+- `GET /twin/attention` — countries requiring freshness or confidence review
 - `GET /twin/validation` — reconciliation of country, game, and continent totals
 - `GET /twin/continents` — country-derived continent aggregates
 - `GET /twin/countries?continent=<id>` — country and per-game estimates

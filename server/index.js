@@ -43,6 +43,29 @@ const allocateCountryGames = (db, country) => {
   })
 }
 
+const freshnessRank = { fresh: 0, review: 1, stale: 2, missing: 3 }
+
+const evaluateFreshness = (db, country, now = Date.now()) => {
+  const ageDays = Math.max(0, (now - new Date(country.last_refreshed).getTime()) / 86_400_000)
+  const policy = db.refresh_policy
+
+  let status = 'fresh'
+  if (ageDays > policy.review_max_age_days || country.confidence < policy.stale_below_confidence) {
+    status = 'stale'
+  } else if (ageDays > policy.fresh_max_age_days || country.confidence < policy.review_below_confidence) {
+    status = 'review'
+  }
+
+  return {
+    status,
+    age_days: Math.round(ageDays * 10) / 10,
+    reasons: [
+      ...(ageDays > policy.fresh_max_age_days ? ['age'] : []),
+      ...(country.confidence < policy.review_below_confidence ? ['low_confidence'] : []),
+    ],
+  }
+}
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
@@ -54,7 +77,32 @@ app.get('/twin/games', (_req, res) => {
 
 app.get('/twin/meta', (_req, res) => {
   const db = readDb()
-  res.json({ dataset: db.dataset, sources: db.sources, country_game_model: db.country_game_model })
+  res.json({
+    dataset: db.dataset,
+    sources: db.sources,
+    country_game_model: db.country_game_model,
+    refresh_policy: db.refresh_policy,
+  })
+})
+
+app.get('/twin/attention', (_req, res) => {
+  const db = readDb()
+  const countries = db.countries
+    .map((country) => ({
+      id: country.id,
+      name: country.name,
+      continent_id: country.continent_id,
+      confidence: country.confidence,
+      freshness: evaluateFreshness(db, country),
+    }))
+    .filter((country) => country.freshness.status !== 'fresh')
+    .sort(
+      (left, right) =>
+        freshnessRank[right.freshness.status] - freshnessRank[left.freshness.status] ||
+        left.confidence - right.confidence,
+    )
+
+  res.json({ count: countries.length, countries })
 })
 
 app.get('/twin/validation', (_req, res) => {
@@ -105,6 +153,12 @@ app.get('/twin/continents', (_req, res) => {
       totalUsers > 0
         ? countries.reduce((sum, country) => sum + country.growth_rate_30d * country.total_users, 0) / totalUsers
         : null
+    const freshnessValues = countries.map((country) => evaluateFreshness(db, country))
+    const freshness = freshnessValues.length
+      ? freshnessValues.reduce((worst, current) =>
+          freshnessRank[current.status] > freshnessRank[worst.status] ? current : worst,
+        )
+      : { status: 'missing', age_days: null, reasons: ['missing_data'] }
 
     return {
       id: continent.id,
@@ -115,6 +169,7 @@ app.get('/twin/continents', (_req, res) => {
       confidence,
       growth_rate_30d: growthRate,
       growth_rate_status: countries.length > 0 ? db.dataset.growth_rate_status : 'missing',
+      freshness,
       data_status: countries.length > 0 ? db.dataset.country_total_users_status : 'missing',
       source_ids: countries.length > 0 ? ['almedia-users-2026-06', 'almedia-rankings-2026-02'] : [],
       country_count: countries.length,
@@ -151,6 +206,7 @@ app.get('/twin/countries', (req, res) => {
         confidence: country.confidence,
         growth_rate_30d: country.growth_rate_30d,
         growth_rate_status: db.dataset.growth_rate_status,
+        freshness: evaluateFreshness(db, country),
         last_refreshed: country.last_refreshed,
         data_status: country.data_status ?? db.dataset.country_total_users_status,
         source_ids: country.source_ids ?? ['almedia-users-2026-06', 'almedia-rankings-2026-02'],

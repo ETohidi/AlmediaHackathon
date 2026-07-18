@@ -147,6 +147,12 @@
       }
     }
   },
+  "refresh_policy": {
+    "fresh_max_age_days": 3,
+    "review_max_age_days": 7,
+    "review_below_confidence": 0.55,
+    "stale_below_confidence": 0.45
+  },
   "country_game_step7_seed_archive": [
     { "country_id": "DE", "game_id": "word-collect", "users": 65000 },
     { "country_id": "DE", "game_id": "office-cat", "users": 52000 },

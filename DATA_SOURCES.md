@@ -18,6 +18,8 @@ The ordering of country estimates follows published App Store rank evidence. Gam
 
 The 30-day growth rates are modeled demonstration estimates, not reported Almedia growth figures. Continent growth is calculated as the user-weighted average of its available country growth estimates.
 
+Freshness is computed from each record's evidence age and confidence using the policy stored in `server/db.json`. `fresh`, `review`, and `stale` are operational attention states for the future agent; they are not claims published by Almedia.
+
 ## Missing data
 
 No estimate is created when public evidence is insufficient. A zero or missing value is rendered without a fill. This is different from a reported count of zero.
