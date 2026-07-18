@@ -392,10 +392,49 @@ type WorldMapProps = {
 type CountryDetailPanelProps = {
   country: CountryMetric
   gameFilter: GameFilter
+  canRefresh: boolean
+  proposal: RefreshProposal | null
+  isRefreshing: boolean
+  refreshError: string | null
+  onRequestRefresh: () => void
+  onApplyProposal: () => void
+  onRejectProposal: () => void
   onClose: () => void
 }
 
-function CountryDetailPanel({ country, gameFilter, onClose }: CountryDetailPanelProps) {
+type RefreshProposal = {
+  id: string
+  status: 'pending' | 'applied' | 'rejected'
+  mode: 'deterministic_demo'
+  current: {
+    total_users: number
+    growth_rate_30d: number
+    confidence: number
+  }
+  proposed: {
+    total_users: number
+    growth_rate_30d: number
+    confidence: number
+  }
+  evidence: {
+    title: string
+    source_type: string
+  }
+  reasoning: string[]
+}
+
+function CountryDetailPanel({
+  country,
+  gameFilter,
+  canRefresh,
+  proposal,
+  isRefreshing,
+  refreshError,
+  onRequestRefresh,
+  onApplyProposal,
+  onRejectProposal,
+  onClose,
+}: CountryDetailPanelProps) {
   return (
     <aside className="fixed bottom-4 right-4 top-16 z-30 w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-slate-700/70 bg-slate-950/95 p-5 text-slate-100 shadow-2xl backdrop-blur-md">
       <div className="flex items-start justify-between gap-4">
@@ -445,6 +484,73 @@ function CountryDetailPanel({ country, gameFilter, onClose }: CountryDetailPanel
         </div>
       </dl>
 
+      <button
+        type="button"
+        onClick={onRequestRefresh}
+        disabled={!canRefresh || isRefreshing || proposal?.status === 'pending'}
+        className="mt-4 w-full rounded-lg border border-teal-500/60 bg-teal-950/60 px-4 py-2.5 text-sm font-semibold text-teal-100 transition hover:bg-teal-900/70 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500"
+      >
+        {isRefreshing ? 'Agent is evaluating…' : canRefresh ? 'Ask agent to refresh' : 'Return to latest snapshot to refresh'}
+      </button>
+
+      {refreshError ? <p className="mt-2 text-xs text-red-400">{refreshError}</p> : null}
+
+      {proposal?.status === 'pending' ? (
+        <section className="mt-4 rounded-lg border border-violet-500/50 bg-violet-950/30 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Agent proposal</h3>
+            <span className="rounded bg-violet-500/20 px-2 py-1 text-[10px] uppercase tracking-wide text-violet-200">
+              Demo model
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">{proposal.evidence.title}</p>
+
+          <div className="mt-3 grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-xs">
+            <span className="text-slate-500" />
+            <span className="text-slate-500">Current</span>
+            <span className="text-slate-500">Proposed</span>
+            <span>Users</span>
+            <span>{numberFormatter.format(proposal.current.total_users)}</span>
+            <span className="font-semibold text-teal-300">{numberFormatter.format(proposal.proposed.total_users)}</span>
+            <span>Growth</span>
+            <span>{(proposal.current.growth_rate_30d * 100).toFixed(1)}%</span>
+            <span className="font-semibold text-teal-300">
+              {(proposal.proposed.growth_rate_30d * 100).toFixed(1)}%
+            </span>
+            <span>Certainty</span>
+            <span>{Math.round(proposal.current.confidence * 100)}%</span>
+            <span className="font-semibold text-teal-300">
+              {Math.round(proposal.proposed.confidence * 100)}%
+            </span>
+          </div>
+
+          <ul className="mt-3 space-y-1 text-xs text-slate-400">
+            {proposal.reasoning.map((reason) => (
+              <li key={reason}>• {reason}</li>
+            ))}
+          </ul>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onRejectProposal}
+              disabled={isRefreshing}
+              className="rounded-md border border-slate-600 px-3 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Reject
+            </button>
+            <button
+              type="button"
+              onClick={onApplyProposal}
+              disabled={isRefreshing}
+              className="rounded-md bg-teal-600 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+            >
+              Approve update
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <div className="mt-5 flex items-center justify-between">
         <h3 className="text-sm font-semibold">Game distribution</h3>
         <span className="text-xs text-slate-500">Modeled</span>
@@ -493,6 +599,9 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
   const isCountryZoomRef = useRef(false)
   const [isCountryZoom, setIsCountryZoom] = useState(false)
   const [selectedCountry, setSelectedCountry] = useState<CountryMetric | null>(null)
+  const [refreshProposal, setRefreshProposal] = useState<RefreshProposal | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   useEffect(() => {
     gameFilterRef.current = gameFilter
@@ -504,6 +613,8 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
 
   useEffect(() => {
     snapshotRef.current = snapshotId
+    setRefreshProposal(null)
+    setRefreshError(null)
     const map = mapRef.current
     if (!map?.isStyleLoaded()) return
 
@@ -799,7 +910,11 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
       map.on('click', 'countries-fill', (event) => {
         const countryId = String(event.features?.[0]?.properties?.id ?? '')
         const country = countryMetricsRef.current.find((entry) => entry.id === countryId)
-        if (country) setSelectedCountry(country)
+        if (country) {
+          setSelectedCountry(country)
+          setRefreshProposal(null)
+          setRefreshError(null)
+        }
       })
 
       map.on('mousemove', 'countries-fill', (event) => {
@@ -834,6 +949,79 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
     }
   }, [])
 
+  const reloadVisibleData = async (countryId: string) => {
+    const map = mapRef.current
+    const continentId = currentContinentIdRef.current
+    if (!map || !continentId) return
+
+    const [{ enrichedContinents, continentLabels }, countryMetrics] = await Promise.all([
+      fetchMapData(snapshotId),
+      fetchContinentCountries(continentId, snapshotId),
+    ])
+
+    applyContinentColoring(map, enrichedContinents, continentLabels)
+    countryMetricsRef.current = countryMetrics
+    applyCountryColoring(map, countryMetrics, gameFilterRef.current)
+    setSelectedCountry(countryMetrics.find((country) => country.id === countryId) ?? null)
+  }
+
+  const handleRequestRefresh = async () => {
+    if (!selectedCountry || snapshotId !== '2026-07-18') return
+    setIsRefreshing(true)
+    setRefreshError(null)
+
+    try {
+      const response = await fetch('/twin/refresh/propose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country_id: selectedCountry.id }),
+      })
+      if (!response.ok) throw new Error('The agent could not create a refresh proposal.')
+      setRefreshProposal((await response.json()) as RefreshProposal)
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : 'Refresh proposal failed.')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const handleApplyProposal = async () => {
+    if (!selectedCountry || !refreshProposal) return
+    setIsRefreshing(true)
+    setRefreshError(null)
+
+    try {
+      const response = await fetch(`/twin/refresh/proposals/${encodeURIComponent(refreshProposal.id)}/apply`, {
+        method: 'POST',
+      })
+      if (!response.ok) throw new Error('The proposed update could not be applied.')
+      await reloadVisibleData(selectedCountry.id)
+      setRefreshProposal(null)
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : 'Applying the proposal failed.')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const handleRejectProposal = async () => {
+    if (!refreshProposal) return
+    setIsRefreshing(true)
+    setRefreshError(null)
+
+    try {
+      const response = await fetch(`/twin/refresh/proposals/${encodeURIComponent(refreshProposal.id)}/reject`, {
+        method: 'POST',
+      })
+      if (!response.ok) throw new Error('The proposed update could not be rejected.')
+      setRefreshProposal(null)
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : 'Rejecting the proposal failed.')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   const handleBackToWorld = () => {
     const map = mapRef.current
     if (!map || !isCountryZoom) {
@@ -845,6 +1033,8 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
     map.setLayoutProperty('country-labels', 'visibility', 'none')
     currentContinentIdRef.current = null
     setSelectedCountry(null)
+    setRefreshProposal(null)
+    setRefreshError(null)
 
     map.once('moveend', () => {
       map.setLayoutProperty('continents-fill', 'visibility', 'visible')
@@ -876,7 +1066,18 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
         <CountryDetailPanel
           country={selectedCountry}
           gameFilter={gameFilter}
-          onClose={() => setSelectedCountry(null)}
+          canRefresh={snapshotId === '2026-07-18'}
+          proposal={refreshProposal}
+          isRefreshing={isRefreshing}
+          refreshError={refreshError}
+          onRequestRefresh={handleRequestRefresh}
+          onApplyProposal={handleApplyProposal}
+          onRejectProposal={handleRejectProposal}
+          onClose={() => {
+            setSelectedCountry(null)
+            setRefreshProposal(null)
+            setRefreshError(null)
+          }}
         />
       ) : null}
     </>

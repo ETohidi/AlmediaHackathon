@@ -31,6 +31,10 @@ Open the local URL printed by Vite, normally `http://localhost:5173`.
 - `GET /twin/games` — sourced game catalog
 - `GET /twin/snapshots` — available modeled twin-history dates
 - `GET /twin/attention` — countries requiring freshness or confidence review
+- `POST /twin/refresh/propose` — deterministic country refresh proposal
+- `POST /twin/refresh/proposals/:id/apply` — approve a pending proposal
+- `POST /twin/refresh/proposals/:id/reject` — reject a pending proposal
+- `POST /twin/refresh/reset` — clear in-memory demo updates
 - `GET /twin/validation` — reconciliation of country, game, and continent totals
 - `GET /twin/continents?asOf=<date>` — snapshot-aware continent aggregates
 - `GET /twin/countries?continent=<id>&asOf=<date>` — snapshot-aware country and game estimates

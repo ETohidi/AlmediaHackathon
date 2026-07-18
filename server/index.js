@@ -9,10 +9,20 @@ const dbPath = path.join(__dirname, 'db.json')
 
 const app = express()
 const port = Number(process.env.PORT ?? 3001)
+const runtimeCountryOverrides = new Map()
+const pendingProposals = new Map()
+let proposalSequence = 0
+
+app.use(express.json())
 
 const readDb = () => {
   const raw = fs.readFileSync(dbPath, 'utf8')
-  return JSON.parse(raw)
+  const db = JSON.parse(raw)
+  db.countries = db.countries.map((country) => ({
+    ...country,
+    ...(runtimeCountryOverrides.get(country.id) ?? {}),
+  }))
+  return db
 }
 
 const allocateCountryGames = (db, country) => {
@@ -75,13 +85,51 @@ const projectCountryToSnapshot = (country, snapshot) => {
     return { ...country, snapshot_id: snapshot.id, snapshot_status: snapshot.data_status }
   }
 
+  const sourceCountry = country.runtime_original ? { ...country, ...country.runtime_original } : country
+
   return {
-    ...country,
-    total_users: Math.round(country.total_users / Math.pow(1 + country.growth_rate_30d, months)),
-    confidence: Math.max(0.3, Math.round((country.confidence - months * 0.04) * 100) / 100),
+    ...sourceCountry,
+    total_users: Math.round(sourceCountry.total_users / Math.pow(1 + sourceCountry.growth_rate_30d, months)),
+    confidence: Math.max(0.3, Math.round((sourceCountry.confidence - months * 0.04) * 100) / 100),
     last_refreshed: `${snapshot.id}T10:00:00.000Z`,
     snapshot_id: snapshot.id,
     snapshot_status: snapshot.data_status,
+  }
+}
+
+const buildDeterministicProposal = (country) => {
+  const hash = [...country.id].reduce((sum, character) => sum + character.charCodeAt(0), 0)
+  const direction = hash % 2 === 0 ? 1 : -1
+  const userAdjustment = direction * ((hash % 5) + 2) / 100
+  const growthAdjustment = direction * ((hash % 3) + 1) / 100
+
+  return {
+    id: `proposal-${++proposalSequence}`,
+    country_id: country.id,
+    country_name: country.name,
+    status: 'pending',
+    generated_at: new Date().toISOString(),
+    mode: 'deterministic_demo',
+    current: {
+      total_users: country.total_users,
+      growth_rate_30d: country.growth_rate_30d,
+      confidence: country.confidence,
+    },
+    proposed: {
+      total_users: Math.max(0, Math.round(country.total_users * (1 + userAdjustment))),
+      growth_rate_30d: Math.max(-0.5, Math.min(0.5, country.growth_rate_30d + growthAdjustment)),
+      confidence: Math.min(0.95, Math.round((country.confidence + 0.12) * 100) / 100),
+    },
+    evidence: {
+      title: `Deterministic market refresh for ${country.name}`,
+      source_type: 'simulated_evidence',
+      observed_user_change: userAdjustment,
+    },
+    reasoning: [
+      'Re-evaluated the country footprint using the deterministic demo model.',
+      'Raised certainty because the simulated evidence is newer than the current estimate.',
+      'Country-game values will be reallocated with the existing regional mix so totals remain consistent.',
+    ],
   }
 }
 
@@ -97,6 +145,65 @@ app.get('/twin/games', (_req, res) => {
 app.get('/twin/snapshots', (_req, res) => {
   const db = readDb()
   res.json(db.snapshots)
+})
+
+app.post('/twin/refresh/propose', (req, res) => {
+  const countryId = req.body?.country_id
+  if (!countryId || typeof countryId !== 'string') {
+    res.status(400).json({ error: 'Body field "country_id" is required.' })
+    return
+  }
+
+  const db = readDb()
+  const country = db.countries.find((entry) => entry.id === countryId)
+  if (!country) {
+    res.status(404).json({ error: `Country not found: ${countryId}` })
+    return
+  }
+
+  const proposal = buildDeterministicProposal(country)
+  pendingProposals.set(proposal.id, proposal)
+  res.status(201).json(proposal)
+})
+
+app.post('/twin/refresh/proposals/:id/apply', (req, res) => {
+  const proposal = pendingProposals.get(req.params.id)
+  if (!proposal || proposal.status !== 'pending') {
+    res.status(404).json({ error: `Pending proposal not found: ${req.params.id}` })
+    return
+  }
+
+  const appliedAt = new Date().toISOString()
+  const existingOverride = runtimeCountryOverrides.get(proposal.country_id)
+  runtimeCountryOverrides.set(proposal.country_id, {
+    ...proposal.proposed,
+    last_refreshed: appliedAt,
+    data_status: 'simulated_refresh',
+    runtime_original: existingOverride?.runtime_original ?? proposal.current,
+  })
+  proposal.status = 'applied'
+  proposal.applied_at = appliedAt
+  pendingProposals.set(proposal.id, proposal)
+  res.json(proposal)
+})
+
+app.post('/twin/refresh/proposals/:id/reject', (req, res) => {
+  const proposal = pendingProposals.get(req.params.id)
+  if (!proposal || proposal.status !== 'pending') {
+    res.status(404).json({ error: `Pending proposal not found: ${req.params.id}` })
+    return
+  }
+
+  proposal.status = 'rejected'
+  proposal.rejected_at = new Date().toISOString()
+  pendingProposals.set(proposal.id, proposal)
+  res.json(proposal)
+})
+
+app.post('/twin/refresh/reset', (_req, res) => {
+  runtimeCountryOverrides.clear()
+  pendingProposals.clear()
+  res.json({ ok: true })
 })
 
 app.get('/twin/meta', (_req, res) => {
