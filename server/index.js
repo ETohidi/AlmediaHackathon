@@ -76,6 +76,29 @@ const evaluateFreshness = (db, country, now = Date.now()) => {
   }
 }
 
+const getInfrastructure = (db, countryId) =>
+  db.country_infrastructure.find((entry) => entry.country_id === countryId) ?? {
+    country_id: countryId,
+    p95_postback_latency_ms: 0,
+    postback_failure_rate: 0,
+    queue_lag_seconds: 0,
+    utilization: 0,
+    capacity_headroom: 1,
+    status: 'unknown',
+    data_status: 'modeled_scenario',
+  }
+
+const getPotential = (db, country) => {
+  const model = db.potential_model
+  const addressableUsers = Math.round(country.total_users * (model.market_multipliers[country.id] ?? model.default_multiplier))
+  return {
+    addressable_users: addressableUsers,
+    untapped_users: Math.max(0, addressableUsers - country.total_users),
+    score: Math.round(Math.min(100, country.growth_rate_30d * 350 + (1 - country.confidence) * 35 + 25)),
+    data_status: 'modeled_estimate',
+  }
+}
+
 const getSnapshot = (db, snapshotId) =>
   db.snapshots.find((snapshot) => snapshot.id === snapshotId) ?? db.snapshots.at(-1)
 
@@ -312,6 +335,27 @@ app.get('/twin/continents', (_req, res) => {
       country_count: countries.length,
       snapshot_id: snapshot.id,
       snapshot_status: snapshot.data_status,
+      potential: {
+        untapped_users: countries.reduce((sum, country) => sum + getPotential(db, country).untapped_users, 0),
+        score: countries.length
+          ? Math.round(countries.reduce((sum, country) => sum + getPotential(db, country).score, 0) / countries.length)
+          : 0,
+        data_status: 'modeled_estimate',
+      },
+      infrastructure: (() => {
+        const values = countries.map((country) => getInfrastructure(db, country.id))
+        const weightedLatency = totalUsers
+          ? Math.round(values.reduce((sum, value, index) => sum + value.p95_postback_latency_ms * countries[index].total_users, 0) / totalUsers)
+          : 0
+        const maxUtilization = values.length ? Math.max(...values.map((value) => value.utilization)) : 0
+        return {
+          p95_postback_latency_ms: weightedLatency,
+          utilization: maxUtilization,
+          capacity_headroom: Math.max(0, 1 - maxUtilization),
+          status: maxUtilization >= 0.9 ? 'critical' : maxUtilization >= 0.75 ? 'degraded' : values.length ? 'healthy' : 'unknown',
+          data_status: 'modeled_scenario',
+        }
+      })(),
     }
   })
 
@@ -352,6 +396,8 @@ app.get('/twin/countries', (req, res) => {
         data_status: country.data_status ?? db.dataset.country_total_users_status,
         source_ids: country.source_ids ?? ['almedia-users-2026-06', 'almedia-rankings-2026-02'],
         games: allocateCountryGames(db, country),
+        potential: getPotential(db, country),
+        infrastructure: getInfrastructure(db, country.id),
       }
     })
 

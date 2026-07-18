@@ -36,6 +36,18 @@ type ContinentMetric = {
   confidence: number | null
   growth_rate_30d: number | null
   freshness: FreshnessMetric
+  potential: { untapped_users: number; score: number; data_status: string }
+  infrastructure: InfrastructureMetric
+}
+
+type InfrastructureMetric = {
+  p95_postback_latency_ms: number
+  postback_failure_rate?: number
+  queue_lag_seconds?: number
+  utilization: number
+  capacity_headroom: number
+  status: string
+  data_status: string
 }
 
 type FreshnessMetric = {
@@ -56,6 +68,8 @@ type CountryMetric = {
   data_status: string
   source_ids: string[]
   freshness: FreshnessMetric
+  potential: { addressable_users: number; untapped_users: number; score: number; data_status: string }
+  infrastructure: InfrastructureMetric
   games: Array<{
     id: string
     name: string
@@ -66,6 +80,7 @@ type CountryMetric = {
 }
 
 export type GameFilter = 'all' | string
+export type MapMode = 'users' | 'potential' | 'capacity'
 
 type GeoJsonFeature = {
   type: 'Feature'
@@ -196,6 +211,12 @@ const mergeMetricsIntoGeoJson = (geoJson: GeoJsonFeatureCollection, metrics: Con
         growth_rate_30d: metric?.growth_rate_30d ?? null,
         freshness_status: metric?.freshness.status ?? 'missing',
         freshness_age_days: metric?.freshness.age_days ?? null,
+        potential_users: metric?.potential.untapped_users ?? 0,
+        potential_score: metric?.potential.score ?? 0,
+        latency_ms: metric?.infrastructure.p95_postback_latency_ms ?? 0,
+        utilization: metric?.infrastructure.utilization ?? 0,
+        capacity_headroom: metric?.infrastructure.capacity_headroom ?? 0,
+        capacity_status: metric?.infrastructure.status ?? 'unknown',
       },
     }
   })
@@ -262,6 +283,7 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilt
       const countryId = String(feature.properties?.id ?? '')
       const metric = metricsById.get(countryId)
       const displayUsers = metric ? getDisplayUsers(metric, gameFilter) : 0
+      const gameShare = metric && gameFilter !== 'all' ? metric.games.find((game) => game.id === gameFilter)?.share ?? 0 : 1
 
       return {
         ...feature,
@@ -275,6 +297,14 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilt
           growth_rate_30d: metric?.growth_rate_30d ?? 0,
           freshness_status: metric?.freshness.status ?? 'missing',
           freshness_age_days: metric?.freshness.age_days ?? null,
+          potential_users: Math.round((metric?.potential.untapped_users ?? 0) * gameShare),
+          potential_score: metric?.potential.score ?? 0,
+          latency_ms: metric?.infrastructure.p95_postback_latency_ms ?? 0,
+          failure_rate: metric?.infrastructure.postback_failure_rate ?? 0,
+          queue_lag_seconds: metric?.infrastructure.queue_lag_seconds ?? 0,
+          utilization: metric?.infrastructure.utilization ?? 0,
+          capacity_headroom: metric?.infrastructure.capacity_headroom ?? 0,
+          capacity_status: metric?.infrastructure.status ?? 'unknown',
         },
       }
     })
@@ -285,9 +315,15 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilt
   }
 }
 
-const applyCountryColoring = (map: MapLibreMap, countryMetrics: CountryMetric[], gameFilter: GameFilter) => {
+const applyCountryColoring = (
+  map: MapLibreMap,
+  countryMetrics: CountryMetric[],
+  gameFilter: GameFilter,
+  mapMode: MapMode,
+) => {
   const countrySource = map.getSource('countries') as GeoJSONSource | undefined
-  countrySource?.setData(buildCountryFeatureCollection(countryMetrics, gameFilter) as any)
+  const countryFeatures = buildCountryFeatureCollection(countryMetrics, gameFilter)
+  countrySource?.setData(countryFeatures as any)
 
   const nonZeroUsers = countryMetrics
     .map((entry) => getDisplayUsers(entry, gameFilter))
@@ -296,18 +332,42 @@ const applyCountryColoring = (map: MapLibreMap, countryMetrics: CountryMetric[],
   const maxUsers = nonZeroUsers.length ? Math.max(...nonZeroUsers) : 1
   const safeMaxUsers = maxUsers <= minUsers ? minUsers + 1 : maxUsers
 
-  map.setPaintProperty('countries-fill', 'fill-color', [
-    'case',
-    ['==', ['get', 'display_users'], 0],
-    'rgba(0, 0, 0, 0)',
-    userConfidenceColorScale(minUsers, safeMaxUsers, 'display_users'),
-  ] as any)
+  const potentialValues = countryFeatures.features
+    .map((feature) => Number(feature.properties.potential_users ?? 0))
+    .filter((value) => value > 0)
+  const minPotential = potentialValues.length ? Math.min(...potentialValues) : 0
+  const maxPotential = potentialValues.length ? Math.max(...potentialValues) : 1
+  const potentialScale = userConfidenceColorScale(
+    minPotential,
+    maxPotential <= minPotential ? minPotential + 1 : maxPotential,
+    'potential_users',
+  )
+  const colorExpression =
+    mapMode === 'capacity'
+      ? [
+          'interpolate',
+          ['linear'],
+          ['get', 'latency_ms'],
+          100,
+          '#14b8a6',
+          225,
+          '#f59e0b',
+          400,
+          '#ef4444',
+        ]
+      : mapMode === 'potential'
+        ? potentialScale
+        : userConfidenceColorScale(minUsers, safeMaxUsers, 'display_users')
+
+  map.setPaintProperty('countries-fill', 'fill-color', colorExpression as any)
+  map.setPaintProperty('countries-fill', 'fill-opacity', mapMode === 'capacity' ? 0.82 : countryFillOpacityExpression)
 }
 
 const applyContinentColoring = (
   map: MapLibreMap,
   enrichedContinents: GeoJsonFeatureCollection,
   continentLabels: ReturnType<typeof buildLabelFeatureCollection>,
+  mapMode: MapMode,
 ) => {
   const continentSource = map.getSource('continents') as GeoJSONSource | undefined
   continentSource?.setData(enrichedContinents as any)
@@ -318,12 +378,15 @@ const applyContinentColoring = (
   const minUsers = nonZeroUsers.length ? Math.min(...nonZeroUsers) : 0
   const maxUsers = nonZeroUsers.length ? Math.max(...nonZeroUsers) : 1
   const safeMaxUsers = maxUsers <= minUsers ? minUsers + 1 : maxUsers
-  map.setPaintProperty('continents-fill', 'fill-color', [
-    'case',
-    ['==', ['get', 'total_users'], 0],
-    'rgba(0, 0, 0, 0)',
-    userConfidenceColorScale(minUsers, safeMaxUsers),
-  ] as any)
+  const potentialValues = enrichedContinents.features.map((feature) => Number(feature.properties.potential_users ?? 0)).filter((value) => value > 0)
+  const minPotential = potentialValues.length ? Math.min(...potentialValues) : 0
+  const maxPotential = potentialValues.length ? Math.max(...potentialValues) : 1
+  const colorExpression = mapMode === 'capacity'
+    ? ['interpolate', ['linear'], ['get', 'latency_ms'], 100, '#14b8a6', 225, '#f59e0b', 400, '#ef4444']
+    : mapMode === 'potential'
+      ? userConfidenceColorScale(minPotential, maxPotential <= minPotential ? minPotential + 1 : maxPotential, 'potential_users')
+      : userConfidenceColorScale(minUsers, safeMaxUsers)
+  map.setPaintProperty('continents-fill', 'fill-color', colorExpression as any)
 
   const labelSource = map.getSource('continent-labels') as GeoJSONSource | undefined
   labelSource?.setData(continentLabels as any)
@@ -337,7 +400,7 @@ const formatStatus = (status: string) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
 
-const buildPopupContent = (properties: Record<string, any>) => {
+const buildPopupContent = (properties: Record<string, any>, mapMode: MapMode) => {
   const container = document.createElement('div')
   const title = document.createElement('div')
   title.textContent = String(properties.name ?? 'Unknown')
@@ -346,7 +409,19 @@ const buildPopupContent = (properties: Record<string, any>) => {
   title.style.marginBottom = '8px'
   container.appendChild(title)
 
-  const rows = [
+  const rows = mapMode === 'capacity' ? [
+    ['p95 latency', `${numberFormatter.format(Number(properties.latency_ms ?? 0))} ms`],
+    ['Utilization', `${Math.round(Number(properties.utilization ?? 0) * 100)}%`],
+    ['Headroom', `${Math.round(Number(properties.capacity_headroom ?? 0) * 100)}%`],
+    ...(properties.failure_rate == null ? [] : [['Failure rate', `${(Number(properties.failure_rate) * 100).toFixed(1)}%`]]),
+    ...(properties.queue_lag_seconds == null ? [] : [['Queue lag', `${Number(properties.queue_lag_seconds)} s`]]),
+    ['Status', formatStatus(String(properties.capacity_status ?? 'unknown'))],
+  ] : mapMode === 'potential' ? [
+    ['Untapped users', numberFormatter.format(Number(properties.potential_users ?? 0))],
+    ['Potential score', `${Math.round(Number(properties.potential_score ?? 0))}/100`],
+    ['Current users', numberFormatter.format(Number(properties.display_users ?? properties.total_users ?? 0))],
+    ['Certainty', properties.confidence == null ? 'Unknown' : `${Math.round(Number(properties.confidence) * 100)}%`],
+  ] : [
     ['Users', numberFormatter.format(Number(properties.display_users ?? properties.total_users ?? 0))],
     [
       'Growth (30d)',
@@ -387,6 +462,7 @@ const buildPopupContent = (properties: Record<string, any>) => {
 type WorldMapProps = {
   gameFilter: GameFilter
   snapshotId: string
+  mapMode: MapMode
 }
 
 type CountryDetailPanelProps = {
@@ -589,12 +665,13 @@ function CountryDetailPanel({
   )
 }
 
-export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
+export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const countryMetricsRef = useRef<CountryMetric[]>([])
   const gameFilterRef = useRef(gameFilter)
   const snapshotRef = useRef(snapshotId)
+  const mapModeRef = useRef(mapMode)
   const currentContinentIdRef = useRef<string | null>(null)
   const isCountryZoomRef = useRef(false)
   const [isCountryZoom, setIsCountryZoom] = useState(false)
@@ -607,9 +684,21 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
     gameFilterRef.current = gameFilter
     const map = mapRef.current
     if (map?.isStyleLoaded() && countryMetricsRef.current.length) {
-      applyCountryColoring(map, countryMetricsRef.current, gameFilter)
+      applyCountryColoring(map, countryMetricsRef.current, gameFilter, mapModeRef.current)
     }
   }, [gameFilter])
+
+  useEffect(() => {
+    mapModeRef.current = mapMode
+    const map = mapRef.current
+    if (!map?.isStyleLoaded()) return
+    fetchMapData(snapshotRef.current).then(({ enrichedContinents, continentLabels }) =>
+      applyContinentColoring(map, enrichedContinents, continentLabels, mapMode),
+    ).catch(console.error)
+    if (countryMetricsRef.current.length) {
+      applyCountryColoring(map, countryMetricsRef.current, gameFilterRef.current, mapMode)
+    }
+  }, [mapMode])
 
   useEffect(() => {
     snapshotRef.current = snapshotId
@@ -620,7 +709,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
 
     fetchMapData(snapshotId)
       .then(({ enrichedContinents, continentLabels }) => {
-        applyContinentColoring(map, enrichedContinents, continentLabels)
+        applyContinentColoring(map, enrichedContinents, continentLabels, mapModeRef.current)
       })
       .catch(console.error)
 
@@ -629,7 +718,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
       fetchContinentCountries(continentId, snapshotId)
         .then((countryMetrics) => {
           countryMetricsRef.current = countryMetrics
-          applyCountryColoring(map, countryMetrics, gameFilterRef.current)
+          applyCountryColoring(map, countryMetrics, gameFilterRef.current, mapModeRef.current)
           setSelectedCountry((current) =>
             current ? countryMetrics.find((country) => country.id === current.id) ?? null : null,
           )
@@ -864,7 +953,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
           countriesRequest
             .then((countryMetrics) => {
               countryMetricsRef.current = countryMetrics
-              applyCountryColoring(map, countryMetrics, gameFilterRef.current)
+              applyCountryColoring(map, countryMetrics, gameFilterRef.current, mapModeRef.current)
 
               map.setLayoutProperty('continents-fill', 'visibility', 'none')
               map.setLayoutProperty('continent-labels', 'visibility', 'none')
@@ -895,7 +984,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
       map.on('mousemove', 'continents-fill', (event) => {
         const feature = event.features?.[0]
         if (!feature?.properties) return
-        hoverPopup.setLngLat(event.lngLat).setDOMContent(buildPopupContent(feature.properties)).addTo(map)
+        hoverPopup.setLngLat(event.lngLat).setDOMContent(buildPopupContent(feature.properties, mapModeRef.current)).addTo(map)
       })
 
       map.on('mouseleave', 'continents-fill', () => {
@@ -920,7 +1009,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
       map.on('mousemove', 'countries-fill', (event) => {
         const feature = event.features?.[0]
         if (!feature?.properties) return
-        hoverPopup.setLngLat(event.lngLat).setDOMContent(buildPopupContent(feature.properties)).addTo(map)
+        hoverPopup.setLngLat(event.lngLat).setDOMContent(buildPopupContent(feature.properties, mapModeRef.current)).addTo(map)
       })
 
       map.on('mouseleave', 'countries-fill', () => {
@@ -930,7 +1019,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
 
       fetchMapData(snapshotRef.current)
         .then(({ enrichedContinents, continentLabels }) => {
-          applyContinentColoring(map, enrichedContinents, continentLabels)
+          applyContinentColoring(map, enrichedContinents, continentLabels, mapModeRef.current)
         })
         .catch((error) => {
           console.error(error)
@@ -959,9 +1048,9 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
       fetchContinentCountries(continentId, snapshotId),
     ])
 
-    applyContinentColoring(map, enrichedContinents, continentLabels)
+    applyContinentColoring(map, enrichedContinents, continentLabels, mapModeRef.current)
     countryMetricsRef.current = countryMetrics
-    applyCountryColoring(map, countryMetrics, gameFilterRef.current)
+    applyCountryColoring(map, countryMetrics, gameFilterRef.current, mapModeRef.current)
     setSelectedCountry(countryMetrics.find((country) => country.id === countryId) ?? null)
   }
 
@@ -1053,6 +1142,12 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
   return (
     <>
       <div ref={containerRef} className="h-full w-full" aria-label="World map" />
+      {mapMode !== 'users' ? (
+        <div className="fixed bottom-5 left-4 z-20 rounded-lg border border-slate-700/70 bg-slate-950/90 px-3 py-2 text-xs text-slate-300 shadow-lg backdrop-blur">
+          <span className="font-semibold text-amber-300">Modeled</span>
+          <span className="ml-2">{mapMode === 'potential' ? 'opportunity estimate' : 'infrastructure scenario — not telemetry'}</span>
+        </div>
+      ) : null}
       {isCountryZoom ? (
         <button
           type="button"
