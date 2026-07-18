@@ -49,7 +49,13 @@ const continentFillColorExpression: any = [
   'case',
   ['==', ['get', 'total_users'], 0],
   'rgba(0, 0, 0, 0)',
-  ['interpolate', ['linear'], ['get', 'total_users'], 1, '#3a4f84', 70000, '#4470c5', 350000, '#4f8fff', 950000, '#6aa8ff'],
+  ['match', ['get', 'id'],
+    'europe', '#1D9E75',
+    'north-america', '#D85A30',
+    'asia', '#BA7517',
+    'oceania', '#D4537E',
+    'rgba(0, 0, 0, 0)',
+  ],
 ]
 
 const continentFillOpacityExpression: any = [
