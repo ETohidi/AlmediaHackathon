@@ -45,6 +45,50 @@ type GeoJsonFeatureCollection = {
   features: GeoJsonFeature[]
 }
 
+const collectPositions = (coordinates: any, target: Array<[number, number]>) => {
+  if (!Array.isArray(coordinates)) {
+    return
+  }
+
+  if (coordinates.length >= 2 && typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
+    target.push([coordinates[0], coordinates[1]])
+    return
+  }
+
+  for (const child of coordinates) {
+    collectPositions(child, target)
+  }
+}
+
+const getBoundsFromGeometry = (geometry: GeoJsonFeature['geometry']) => {
+  const points: Array<[number, number]> = []
+  collectPositions(geometry.coordinates, points)
+
+  if (!points.length) {
+    return null
+  }
+
+  let minLon = Infinity
+  let maxLon = -Infinity
+  let minLat = Infinity
+  let maxLat = -Infinity
+
+  for (const [lon, lat] of points) {
+    if (lon < minLon) minLon = lon
+    if (lon > maxLon) maxLon = lon
+    if (lat < minLat) minLat = lat
+    if (lat > maxLat) maxLat = lat
+  }
+
+  return {
+    center: [(minLon + maxLon) / 2, (minLat + maxLat) / 2] as [number, number],
+    bounds: [
+      [minLon, minLat],
+      [maxLon, maxLat],
+    ] as [[number, number], [number, number]],
+  }
+}
+
 const continentFillColorExpression: any = [
   'case',
   ['==', ['get', 'total_users'], 0],
@@ -163,7 +207,7 @@ export function WorldMap() {
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: MAP_STYLE,
-      interactive: false,
+      interactive: true,
       attributionControl: false,
       renderWorldCopies: false,
     })
@@ -232,6 +276,39 @@ export function WorldMap() {
       map.fitBounds(WORLD_BOUNDS, {
         padding: { top: 48, right: 48, bottom: 48, left: 48 },
         duration: 0,
+      })
+
+      map.on('click', 'continents-fill', (event) => {
+        const clickedFeature = event.features?.[0] as GeoJsonFeature | undefined
+        if (!clickedFeature?.geometry) {
+          return
+        }
+
+        const geometryBounds = getBoundsFromGeometry(clickedFeature.geometry)
+        if (!geometryBounds) {
+          return
+        }
+
+        const camera = map.cameraForBounds(geometryBounds.bounds, {
+          padding: { top: 72, right: 72, bottom: 72, left: 72 },
+        })
+
+        map.flyTo({
+          center: geometryBounds.center,
+          zoom: camera?.zoom ?? map.getZoom(),
+          speed: 0.7,
+          curve: 1.35,
+          easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+          essential: true,
+        })
+      })
+
+      map.on('mouseenter', 'continents-fill', () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+
+      map.on('mouseleave', 'continents-fill', () => {
+        map.getCanvas().style.cursor = ''
       })
 
       fetchMapData()
