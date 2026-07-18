@@ -12,6 +12,9 @@ const WORLD_BOUNDS: [[number, number], [number, number]] = [
 const MAP_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   name: 'World Blank Ocean',
+  projection: {
+    type: 'globe',
+  },
   sources: {},
   layers: [
     {
@@ -487,6 +490,7 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
   const gameFilterRef = useRef(gameFilter)
   const snapshotRef = useRef(snapshotId)
   const currentContinentIdRef = useRef<string | null>(null)
+  const isCountryZoomRef = useRef(false)
   const [isCountryZoom, setIsCountryZoom] = useState(false)
   const [selectedCountry, setSelectedCountry] = useState<CountryMetric | null>(null)
 
@@ -541,8 +545,45 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
       offset: 12,
       className: 'metagame-popup',
     })
+    let rotationFrame: number | null = null
+    let previousFrameTime = performance.now()
+    let lastUserInteraction = 0
+
+    const noteUserInteraction = () => {
+      lastUserInteraction = performance.now()
+    }
+
+    const rotateGlobe = (frameTime: number) => {
+      const elapsed = Math.min(frameTime - previousFrameTime, 100)
+      previousFrameTime = frameTime
+
+      if (
+        !isCountryZoomRef.current &&
+        map.getProjection().type === 'globe' &&
+        frameTime - lastUserInteraction > 2500 &&
+        !map.isMoving()
+      ) {
+        const center = map.getCenter()
+        map.jumpTo({ center: [center.lng + elapsed * 0.0015, center.lat] })
+      }
+
+      rotationFrame = requestAnimationFrame(rotateGlobe)
+    }
+
+    const canvas = map.getCanvas()
+    canvas.addEventListener('mousedown', noteUserInteraction)
+    canvas.addEventListener('touchstart', noteUserInteraction)
+    canvas.addEventListener('wheel', noteUserInteraction, { passive: true })
+    rotationFrame = requestAnimationFrame(rotateGlobe)
 
     map.on('load', () => {
+      map.setSky({
+        'sky-color': '#05070d',
+        'horizon-color': '#1e293b',
+        'fog-color': '#0f172a',
+        'fog-ground-blend': 0.55,
+        'atmosphere-blend': 0.9,
+      })
       map.addSource('continents', {
         type: 'geojson',
         data: {
@@ -694,6 +735,9 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
         }
 
         currentContinentIdRef.current = continentId
+        isCountryZoomRef.current = true
+        hoverPopup.remove()
+        map.setProjection({ type: 'mercator' })
         const countriesRequest = fetchContinentCountries(continentId, snapshotRef.current)
 
         const geometryBounds = getBoundsFromGeometry(clickedFeature.geometry)
@@ -781,6 +825,10 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
     mapRef.current = map
 
     return () => {
+      if (rotationFrame != null) cancelAnimationFrame(rotationFrame)
+      canvas.removeEventListener('mousedown', noteUserInteraction)
+      canvas.removeEventListener('touchstart', noteUserInteraction)
+      canvas.removeEventListener('wheel', noteUserInteraction)
       map.remove()
       mapRef.current = null
     }
@@ -801,6 +849,8 @@ export function WorldMap({ gameFilter, snapshotId }: WorldMapProps) {
     map.once('moveend', () => {
       map.setLayoutProperty('continents-fill', 'visibility', 'visible')
       map.setLayoutProperty('continent-labels', 'visibility', 'visible')
+      map.setProjection({ type: 'globe' })
+      isCountryZoomRef.current = false
       setIsCountryZoom(false)
     })
 
