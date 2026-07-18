@@ -16,7 +16,7 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
       id: 'background',
       type: 'background',
       paint: {
-        'background-color': '#ffffff',
+        'background-color': '#0d0d0f',
       },
     },
   ],
@@ -25,6 +25,8 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
 type ContinentMetric = {
   id: string
   name: string
+  label_lng?: number
+  label_lat?: number
   total_users: number
   confidence: number | null
 }
@@ -47,73 +49,27 @@ const continentFillColorExpression: any = [
   'case',
   ['==', ['get', 'total_users'], 0],
   'rgba(0, 0, 0, 0)',
-  ['>=', ['get', 'confidence'], 0.88],
-  ['interpolate', ['linear'], ['get', 'total_users'], 1, '#dbeafe', 250000, '#93c5fd', 600000, '#3b82f6', 1000000, '#1d4ed8'],
-  ['>=', ['get', 'confidence'], 0.75],
-  ['interpolate', ['linear'], ['get', 'total_users'], 1, '#e8f0ff', 250000, '#b8d0ff', 600000, '#69a0f3', 1000000, '#3d74d9'],
-  ['interpolate', ['linear'], ['get', 'total_users'], 1, '#f0f5ff', 250000, '#d4e1ff', 600000, '#9abcf4', 1000000, '#6f92d1'],
+  ['interpolate', ['linear'], ['get', 'total_users'], 1, '#3a4f84', 70000, '#4470c5', 350000, '#4f8fff', 950000, '#6aa8ff'],
 ]
 
-const continentLabelCenters: Record<string, [number, number]> = {
-  europe: [16, 54],
-  'north-america': [-101, 45],
-  'south-america': [-60, -20],
-  asia: [95, 35],
-  africa: [20, 5],
-  oceania: [138, -24],
-}
+const continentFillOpacityExpression: any = [
+  'case',
+  ['==', ['get', 'total_users'], 0],
+  0,
+  ['interpolate', ['linear'], ['coalesce', ['get', 'confidence'], 0.3], 0.3, 0.72, 0.65, 0.82, 1, 0.95],
+]
 
-const collectPositions = (coordinates: any, target: Array<[number, number]>) => {
-  if (!Array.isArray(coordinates)) {
-    return
-  }
+const continentOutlineColor = '#4b5563'
 
-  if (coordinates.length >= 2 && typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
-    target.push([coordinates[0], coordinates[1]])
-    return
-  }
+const buildLabelFeatureCollection = (features: GeoJsonFeature[], metrics: ContinentMetric[]) => {
+  const anchorsById = new Map(metrics.map((entry) => [entry.id, [entry.label_lng, entry.label_lat] as const]))
 
-  for (const child of coordinates) {
-    collectPositions(child, target)
-  }
-}
-
-const buildLabelFeatureCollection = (features: GeoJsonFeature[]) => {
   const labelFeatures = features
     .map((feature) => {
       const featureId = String(feature.properties?.id ?? '')
-      const fixedCenter = continentLabelCenters[featureId]
-      if (fixedCenter) {
-        return {
-          type: 'Feature' as const,
-          properties: {
-            id: feature.properties.id,
-            name: feature.properties.name,
-          },
-          geometry: {
-            type: 'Point' as const,
-            coordinates: fixedCenter,
-          },
-        }
-      }
-
-      const points: Array<[number, number]> = []
-      collectPositions(feature.geometry.coordinates, points)
-
-      if (!points.length) {
+      const fixedCenter = anchorsById.get(featureId)
+      if (!fixedCenter || fixedCenter[0] == null || fixedCenter[1] == null) {
         return null
-      }
-
-      let minLon = Infinity
-      let maxLon = -Infinity
-      let minLat = Infinity
-      let maxLat = -Infinity
-
-      for (const [lon, lat] of points) {
-        if (lon < minLon) minLon = lon
-        if (lon > maxLon) maxLon = lon
-        if (lat < minLat) minLat = lat
-        if (lat > maxLat) maxLat = lat
       }
 
       return {
@@ -124,7 +80,7 @@ const buildLabelFeatureCollection = (features: GeoJsonFeature[]) => {
         },
         geometry: {
           type: 'Point' as const,
-          coordinates: [(minLon + maxLon) / 2, (minLat + maxLat) / 2],
+          coordinates: [fixedCenter[0], fixedCenter[1]],
         },
       }
     })
@@ -181,7 +137,7 @@ const fetchMapData = async () => {
   const metrics = (await metricsResponse.json()) as ContinentMetric[]
 
   const enrichedContinents = mergeMetricsIntoGeoJson(continentsGeoJson, metrics)
-  const continentLabels = buildLabelFeatureCollection(enrichedContinents.features)
+  const continentLabels = buildLabelFeatureCollection(enrichedContinents.features, metrics)
 
   return {
     enrichedContinents,
@@ -229,7 +185,23 @@ export function WorldMap() {
         source: 'continents',
         paint: {
           'fill-color': continentFillColorExpression,
-          'fill-opacity': 1,
+          'fill-opacity': continentFillOpacityExpression,
+        },
+      })
+
+      map.addLayer({
+        id: 'continents-outline',
+        type: 'line',
+        source: 'continents',
+        paint: {
+          'line-color': continentOutlineColor,
+          'line-width': 1,
+          'line-opacity': [
+            'case',
+            ['==', ['get', 'total_users'], 0],
+            0.72,
+            0.2,
+          ],
         },
       })
 
@@ -245,9 +217,9 @@ export function WorldMap() {
           'text-ignore-placement': false,
         },
         paint: {
-          'text-color': '#334155',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 1,
+          'text-color': '#d1d5db',
+          'text-halo-color': '#0d0d0f',
+          'text-halo-width': 1.5,
         },
       })
 

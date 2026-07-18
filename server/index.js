@@ -32,6 +32,8 @@ app.get('/twin/continents', (_req, res) => {
     return {
       id: continent.id,
       name: continent.name,
+      label_lng: continent.label_lng,
+      label_lat: continent.label_lat,
       total_users: totalUsers,
       confidence,
       country_count: countries.length,

@@ -1,11 +1,11 @@
 {
   "continents": [
-    { "id": "europe", "name": "Europe" },
-    { "id": "north-america", "name": "North America" },
-    { "id": "asia", "name": "Asia" },
-    { "id": "oceania", "name": "Oceania" },
-    { "id": "south-america", "name": "South America" },
-    { "id": "africa", "name": "Africa" }
+    { "id": "europe", "name": "Europe", "label_lng": 16, "label_lat": 54 },
+    { "id": "north-america", "name": "North America", "label_lng": -101, "label_lat": 45 },
+    { "id": "asia", "name": "Asia", "label_lng": 95, "label_lat": 35 },
+    { "id": "oceania", "name": "Oceania", "label_lng": 138, "label_lat": -24 },
+    { "id": "south-america", "name": "South America", "label_lng": -60, "label_lat": -20 },
+    { "id": "africa", "name": "Africa", "label_lng": 20, "label_lat": 5 }
   ],
   "countries": [
     { "id": "DE", "name": "Germany", "continent_id": "europe", "total_users": 180000, "confidence": 0.92, "last_refreshed": "2026-07-18T10:00:00.000Z" },
