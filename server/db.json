@@ -14,6 +14,14 @@
   },
   "sources": [
     {
+      "id": "freecash-rewards-homepage-2026-07",
+      "title": "Freecash rewards marketplace and public payout totals",
+      "publisher": "Freecash",
+      "accessed_at": "2026-07-18",
+      "url": "https://freecash.com/en",
+      "supports": "Rewarded offer mechanism, public offer examples, and cumulative platform rewards; does not disclose Almedia unit economics."
+    },
+    {
       "id": "almedia-users-2026-06",
       "title": "Freecash Makes Its Comeback on the iOS App Store, Rewarding Over 80 Million Users and Counting",
       "publisher": "Almedia",
@@ -232,5 +240,22 @@
     { "country_id": "KR", "p95_postback_latency_ms": 296, "postback_failure_rate": 0.03, "queue_lag_seconds": 24, "utilization": 0.88, "capacity_headroom": 0.12, "status": "degraded", "data_status": "modeled_scenario" },
     { "country_id": "CN", "p95_postback_latency_ms": 386, "postback_failure_rate": 0.047, "queue_lag_seconds": 41, "utilization": 0.96, "capacity_headroom": 0.04, "status": "critical", "data_status": "modeled_scenario" },
     { "country_id": "AU", "p95_postback_latency_ms": 342, "postback_failure_rate": 0.039, "queue_lag_seconds": 33, "utilization": 0.9, "capacity_headroom": 0.1, "status": "critical", "data_status": "modeled_scenario" }
-  ]
+  ],
+  "business_model": {
+    "methodology": "Scenario unit economics, not Almedia financials. Advertiser revenue and rewards are estimated per verified completion; registered footprint is converted to modeled monthly activity. All assumptions are editable.",
+    "monthly_active_share": 0.08,
+    "variable_operations_rate": 0.07,
+    "revenue_at_risk_per_active_user_usd": 2.4,
+    "infrastructure": { "base_upgrade_cost_usd": 45000, "cost_per_supported_user_usd": 0.18, "monthly_opex_rate": 0.08, "expected_recovery_rate": 0.62, "assumption_confidence": 0.35 },
+    "onboarding": { "first_90_day_profit_factor": 1.8 },
+    "game_assumptions": {
+      "word-collect": { "advertiser_revenue_per_completion_usd": 24, "user_reward_per_completion_usd": 16.5, "paid_completion_rate": 0.22, "reward_dispute_rate": 0.018, "onboarding_cost_usd": 65000, "assumption_confidence": 0.42 },
+      "office-cat": { "advertiser_revenue_per_completion_usd": 31, "user_reward_per_completion_usd": 21.5, "paid_completion_rate": 0.2, "reward_dispute_rate": 0.022, "onboarding_cost_usd": 78000, "assumption_confidence": 0.44 },
+      "monopoly-go": { "advertiser_revenue_per_completion_usd": 39, "user_reward_per_completion_usd": 27.5, "paid_completion_rate": 0.18, "reward_dispute_rate": 0.028, "onboarding_cost_usd": 90000, "assumption_confidence": 0.38 },
+      "match-masters": { "advertiser_revenue_per_completion_usd": 34, "user_reward_per_completion_usd": 23.5, "paid_completion_rate": 0.21, "reward_dispute_rate": 0.02, "onboarding_cost_usd": 80000, "assumption_confidence": 0.45 },
+      "animals-and-coins": { "advertiser_revenue_per_completion_usd": 29, "user_reward_per_completion_usd": 19.5, "paid_completion_rate": 0.2, "reward_dispute_rate": 0.021, "onboarding_cost_usd": 72000, "assumption_confidence": 0.43 },
+      "word-farm-adventure": { "advertiser_revenue_per_completion_usd": 22, "user_reward_per_completion_usd": 14.5, "paid_completion_rate": 0.24, "reward_dispute_rate": 0.016, "onboarding_cost_usd": 60000, "assumption_confidence": 0.46 },
+      "jewels-jungle": { "advertiser_revenue_per_completion_usd": 26, "user_reward_per_completion_usd": 17.5, "paid_completion_rate": 0.23, "reward_dispute_rate": 0.019, "onboarding_cost_usd": 68000, "assumption_confidence": 0.45 }
+    }
+  }
 }

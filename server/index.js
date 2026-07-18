@@ -2,6 +2,7 @@ import express from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildBusinessModel } from './businessModel.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -168,6 +169,46 @@ app.get('/twin/games', (_req, res) => {
 app.get('/twin/snapshots', (_req, res) => {
   const db = readDb()
   res.json(db.snapshots)
+})
+
+app.get('/twin/economics', (_req, res) => {
+  res.json(buildBusinessModel(readDb()))
+})
+
+app.post('/twin/agent/chat', async (req, res) => {
+  const question = req.body?.message
+  if (typeof question !== 'string' || !question.trim() || question.length > 2000) {
+    res.status(400).json({ error: 'A message of at most 2,000 characters is required.' })
+    return
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    res.status(503).json({ error: 'OpenAI is not configured. Set OPENAI_API_KEY on the server.' })
+    return
+  }
+
+  const db = readDb()
+  const economics = buildBusinessModel(db)
+  const context = { dataset: db.dataset, economics, countries: db.countries, infrastructure: db.country_infrastructure }
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL ?? 'gpt-5.6-sol',
+        reasoning: { effort: 'low' },
+        store: false,
+        max_output_tokens: 1200,
+        instructions: 'You are MetaGame Business Analyst for Almedia. Answer from the supplied twin context. Lead with the decision. Show relevant revenue, reward, cost, profit, payback, and risk calculations. Never present modeled values as actual Almedia financials. Label sourced facts, modeled estimates, and unknowns. Do not invent figures outside the context. Recommend actions, but never claim to execute spending or operational changes.',
+        input: `TWIN CONTEXT\n${JSON.stringify(context)}\n\nUSER QUESTION\n${question}`,
+      }),
+    })
+    const payload = await response.json()
+    if (!response.ok) throw new Error(payload?.error?.message ?? 'OpenAI request failed')
+    const answer = payload.output_text ?? payload.output?.flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text
+    res.json({ answer: answer ?? 'The model returned no text.', model: payload.model, data_status: 'model_interpretation_of_twin' })
+  } catch (error) {
+    res.status(502).json({ error: error instanceof Error ? error.message : 'OpenAI request failed.' })
+  }
 })
 
 app.post('/twin/refresh/propose', (req, res) => {

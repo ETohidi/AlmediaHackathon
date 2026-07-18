@@ -26,6 +26,8 @@ Growth-potential values are scenario estimates derived from current footprint, m
 
 Latency, failure rate, queue lag, utilization, and headroom values are modeled infrastructure scenarios. Almedia has not publicly disclosed its underlying telemetry, cloud topology, or processing limits.
 
+Business economics are scenario calculations rather than Almedia accounts. Public evidence establishes the rewarded-UA mechanism, public reward examples, and relative ROAS outcomes, but not Almedia's advertiser prices, reward share, costs, or margins. The editable `business_model` assumptions cover monthly activity, paid completion, advertiser revenue, user rewards, variable operations, onboarding, and infrastructure investment. The OpenAI agent may interpret these calculations but is instructed not to create unsupported financial values.
+
 ## Missing data
 
 No estimate is created when public evidence is insufficient. A zero or missing value is rendered without a fill. This is different from a reported count of zero.

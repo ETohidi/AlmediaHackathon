@@ -24,11 +24,17 @@ npm run dev
 
 Open the local URL printed by Vite, normally `http://localhost:5173`.
 
+### OpenAI business agent
+
+Copy `.env.example` to `.env`, set `OPENAI_API_KEY`, and export it before starting the backend. The key is server-side only and must never be exposed through Vite or committed. Without a key, the map remains available and chat reports that OpenAI is not configured.
+
 ## Current API
 
 - `GET /health`
 - `GET /twin/meta` — dataset methodology and source catalog
 - `GET /twin/games` — sourced game catalog
+- `GET /twin/economics` — modeled unit economics, onboarding, infrastructure ROI, and risk
+- `POST /twin/agent/chat` — OpenAI analysis grounded in the current twin and financial scenario
 - `GET /twin/snapshots` — available modeled twin-history dates
 - `GET /twin/attention` — countries requiring freshness or confidence review
 - `POST /twin/refresh/propose` — deterministic country refresh proposal

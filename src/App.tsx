@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { WorldMap } from './components/WorldMap'
 import type { GameFilter, MapMode } from './components/WorldMap'
+import { BusinessChat } from './components/BusinessChat'
 
 type Game = { id: string; name: string }
 type Snapshot = { id: string; label: string }
@@ -35,6 +36,7 @@ function App() {
   return (
     <main className="h-screen w-screen overflow-hidden bg-[#0d0d0f]">
       <WorldMap gameFilter={gameFilter} snapshotId={snapshotId} mapMode={mapMode} />
+      <BusinessChat />
       <header className="fixed inset-x-0 top-0 z-20 flex h-12 items-center justify-between bg-[#0d0d0f]/80 px-4 backdrop-blur-sm">
         <span className="text-sm font-semibold tracking-wide text-slate-100">MetaGame</span>
         <div className="flex items-center gap-2">
