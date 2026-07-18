@@ -46,7 +46,7 @@ function App() {
             onChange={(event) => setMapMode(event.target.value as MapMode)}
             className="rounded border border-slate-600/70 bg-slate-900/90 px-2.5 py-1.5 text-sm text-slate-100 outline-none"
           >
-            <option value="users">Current users</option>
+            <option value="users">Users</option>
             <option value="potential">Growth potential</option>
             <option value="capacity">Latency &amp; capacity</option>
           </select>
