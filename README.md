@@ -38,7 +38,7 @@ These values support comparisons and demonstrations; they are not presented as A
 
 The in-product chat is a concise business analyst grounded in the current twin. It can answer questions about users, game economics, opportunity, infrastructure, onboarding, profitability, and risk.
 
-It also supports temporary what-if questions such as, “What if Germany had one million more users?” MetaGame calculates the modeled user, profit, utilization, latency, and capacity impact for the response only. Scenarios are never written to the database, refresh state, research evidence, or Cognee memory.
+It also supports temporary what-if questions such as, “What if Germany had one million more users?” MetaGame calculates the modeled user, profit, utilization, latency, and capacity impact, then temporarily recolors the affected continent and country on the map. A Clear control restores the original view. Scenarios are never written to the database, refresh state, research evidence, or Cognee memory.
 
 The agent is designed to avoid unsupported conclusions:
 

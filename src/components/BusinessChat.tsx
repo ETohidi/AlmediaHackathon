@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
+import type { WhatIfScenario } from './WorldMap'
 
 type ResearchSource = { id: string; title: string; url: string; relevance: number }
 type Message = { role: 'user' | 'assistant'; text: string; researchId?: string; sources?: ResearchSource[]; researchStatus?: 'pending' | 'approved' | 'rejected'; memoryStatus?: 'syncing' | 'pending_retry'; serviceMode?: 'primary' | 'fallback' }
 const suggestions = ['Which game has the best modeled margin and risk balance?', 'Where should we invest in infrastructure first?', 'Estimate the payback of onboarding a new game.']
 
-export function BusinessChat() {
+export function BusinessChat({ onScenarioChange }: { onScenarioChange: (scenario: WhatIfScenario | null) => void }) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
@@ -16,6 +17,7 @@ export function BusinessChat() {
       const response = await fetch('/twin/agent/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: question }) })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error ?? 'The business agent is unavailable.')
+      if (payload.scenario) onScenarioChange(payload.scenario as WhatIfScenario)
       setMessages((current) => [...current, { role: 'assistant', text: payload.answer, researchId: payload.research?.id, sources: payload.research?.sources, researchStatus: payload.research ? 'pending' : undefined, serviceMode: payload.service_mode }])
     } catch (error) {
       setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'The business agent is unavailable.' }])

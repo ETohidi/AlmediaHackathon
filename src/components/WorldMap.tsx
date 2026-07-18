@@ -81,6 +81,23 @@ type CountryMetric = {
 
 export type GameFilter = 'all' | string
 export type MapMode = 'users' | 'potential' | 'capacity'
+export type WhatIfScenario = {
+  country_id: string
+  country_name: string
+  continent_id: string
+  current_users: number
+  user_change: number
+  projected_users: number
+  projected_utilization: number
+  projected_p95_latency_ms: number
+  capacity_status: string
+  game_user_changes: Record<string, number>
+  persistence: 'none'
+}
+
+let activeScenario: WhatIfScenario | null = null
+const getScenarioUserChange = (gameFilter: GameFilter) =>
+  activeScenario ? (gameFilter === 'all' ? activeScenario.user_change : activeScenario.game_user_changes[gameFilter] ?? 0) : 0
 
 type GeoJsonFeature = {
   type: 'Feature'
@@ -244,7 +261,25 @@ const fetchMapData = async (snapshotId: string, gameFilter: GameFilter) => {
   const continentsGeoJson = (await continentsResponse.json()) as GeoJsonFeatureCollection
   const metrics = (await metricsResponse.json()) as ContinentMetric[]
 
-  const enrichedContinents = mergeMetricsIntoGeoJson(continentsGeoJson, metrics)
+  let enrichedContinents = mergeMetricsIntoGeoJson(continentsGeoJson, metrics)
+  if (activeScenario) {
+    const scenarioChange = getScenarioUserChange(gameFilter)
+    enrichedContinents = {
+      ...enrichedContinents,
+      features: enrichedContinents.features.map((feature) => feature.properties.id === activeScenario?.continent_id ? {
+        ...feature,
+        properties: {
+          ...feature.properties,
+          total_users: Math.max(0, Number(feature.properties.total_users ?? 0) + scenarioChange),
+          latency_ms: activeScenario.projected_p95_latency_ms,
+          utilization: activeScenario.projected_utilization,
+          capacity_headroom: Math.max(0, 1 - activeScenario.projected_utilization),
+          capacity_status: activeScenario.capacity_status,
+          scenario: true,
+        },
+      } : feature),
+    }
+  }
   const continentLabels = buildLabelFeatureCollection(enrichedContinents.features, metrics)
 
   return {
@@ -283,6 +318,8 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilt
       const countryId = String(feature.properties?.id ?? '')
       const metric = metricsById.get(countryId)
       const displayUsers = metric ? getDisplayUsers(metric, gameFilter) : 0
+      const scenarioChange = metric?.id === activeScenario?.country_id ? getScenarioUserChange(gameFilter) : 0
+      const scenarioMetric = metric?.id === activeScenario?.country_id ? activeScenario : null
       const gameShare = metric && gameFilter !== 'all' ? metric.games.find((game) => game.id === gameFilter)?.share ?? 0 : 1
 
       return {
@@ -292,19 +329,20 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilt
           id: countryId,
           name: metric?.name ?? String(feature.properties?.name ?? countryId),
           total_users: metric?.total_users ?? 0,
-          display_users: displayUsers,
+          display_users: Math.max(0, displayUsers + scenarioChange),
           confidence: metric?.confidence ?? 0,
           growth_rate_30d: metric?.growth_rate_30d ?? 0,
           freshness_status: metric?.freshness.status ?? 'missing',
           freshness_age_days: metric?.freshness.age_days ?? null,
           potential_users: Math.round((metric?.potential.untapped_users ?? 0) * gameShare),
           potential_score: metric?.potential.score ?? 0,
-          latency_ms: metric?.infrastructure.p95_postback_latency_ms ?? 0,
+          latency_ms: scenarioMetric?.projected_p95_latency_ms ?? metric?.infrastructure.p95_postback_latency_ms ?? 0,
           failure_rate: metric?.infrastructure.postback_failure_rate ?? 0,
           queue_lag_seconds: metric?.infrastructure.queue_lag_seconds ?? 0,
-          utilization: metric?.infrastructure.utilization ?? 0,
-          capacity_headroom: metric?.infrastructure.capacity_headroom ?? 0,
-          capacity_status: metric?.infrastructure.status ?? 'unknown',
+          utilization: scenarioMetric?.projected_utilization ?? metric?.infrastructure.utilization ?? 0,
+          capacity_headroom: scenarioMetric ? Math.max(0, 1 - scenarioMetric.projected_utilization) : metric?.infrastructure.capacity_headroom ?? 0,
+          capacity_status: scenarioMetric?.capacity_status ?? metric?.infrastructure.status ?? 'unknown',
+          scenario: Boolean(scenarioMetric),
         },
       }
     })
@@ -464,6 +502,8 @@ type WorldMapProps = {
   gameFilter: GameFilter
   snapshotId: string
   mapMode: MapMode
+  scenario: WhatIfScenario | null
+  onClearScenario: () => void
 }
 
 type CountryDetailPanelProps = {
@@ -666,7 +706,7 @@ function CountryDetailPanel({
   )
 }
 
-export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
+export function WorldMap({ gameFilter, snapshotId, mapMode, scenario, onClearScenario }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const countryMetricsRef = useRef<CountryMetric[]>([])
@@ -680,6 +720,16 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
   const [refreshProposal, setRefreshProposal] = useState<RefreshProposal | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
+
+  useEffect(() => {
+    activeScenario = scenario
+    const map = mapRef.current
+    if (!map?.isStyleLoaded()) return
+    fetchMapData(snapshotRef.current, gameFilterRef.current).then(({ enrichedContinents, continentLabels }) =>
+      applyContinentColoring(map, enrichedContinents, continentLabels, mapModeRef.current),
+    ).catch(console.error)
+    if (countryMetricsRef.current.length) applyCountryColoring(map, countryMetricsRef.current, gameFilterRef.current, mapModeRef.current)
+  }, [scenario])
 
   useEffect(() => {
     gameFilterRef.current = gameFilter
@@ -1155,6 +1205,7 @@ export function WorldMap({ gameFilter, snapshotId, mapMode }: WorldMapProps) {
   return (
     <>
       <div ref={containerRef} className="h-full w-full" aria-label="World map" />
+      {scenario ? <div className="fixed bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-amber-400/50 bg-slate-950/95 px-4 py-2 text-xs text-slate-100 shadow-xl backdrop-blur"><span><strong className="text-amber-300">What-if:</strong> {scenario.country_name} {scenario.user_change >= 0 ? '+' : ''}{numberFormatter.format(scenario.user_change)} users</span><button type="button" onClick={onClearScenario} className="rounded-full border border-slate-600 px-2 py-0.5 text-slate-300 hover:bg-slate-800">Clear</button></div> : null}
       {!isCountryZoom ? <div className="metagame-stars" aria-hidden="true" /> : null}
       {mapMode !== 'users' ? (
         <div className="fixed bottom-5 left-4 z-20 rounded-lg border border-slate-700/70 bg-slate-950/90 px-3 py-2 text-xs text-slate-300 shadow-lg backdrop-blur">

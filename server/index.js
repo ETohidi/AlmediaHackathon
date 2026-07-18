@@ -152,6 +152,7 @@ const parseUserScenario = (question, db, economics) => {
     type: 'temporary_user_scenario',
     country_id: country.id,
     country_name: country.name,
+    continent_id: country.continent_id,
     current_users: country.total_users,
     user_change: effectiveDelta,
     projected_users: projectedUsers,
@@ -161,6 +162,7 @@ const parseUserScenario = (question, db, economics) => {
     current_p95_latency_ms: infrastructure.p95_postback_latency_ms,
     projected_p95_latency_ms: projectedLatency,
     capacity_status: projectedUtilization >= 1 ? 'over_capacity' : projectedUtilization >= 0.85 ? 'critical' : projectedUtilization >= 0.7 ? 'degraded' : 'healthy',
+    game_user_changes: Object.fromEntries(db.games.map((game) => [game.id, Math.round(effectiveDelta * (weights[game.id] ?? 0))])),
     data_status: 'modeled_what_if',
     persistence: 'none',
   }
