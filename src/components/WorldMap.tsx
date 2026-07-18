@@ -39,7 +39,14 @@ type CountryMetric = {
   continent_id: string
   total_users: number
   confidence: number
+  games: Array<{
+    id: string
+    name: string
+    users: number
+  }>
 }
+
+export type GameFilter = 'all' | 'word-collect' | 'office-cat' | 'monopoly-go'
 
 type GeoJsonFeature = {
   type: 'Feature'
@@ -117,7 +124,7 @@ const continentOutlineColor = '#4b5563'
 
 const countryFillOpacityExpression: any = [
   'case',
-  ['==', ['get', 'total_users'], 0],
+  ['==', ['get', 'display_users'], 0],
   0,
   ['interpolate', ['linear'], ['coalesce', ['get', 'confidence'], 0.3], 0.3, 0.35, 0.65, 0.72, 1, 1],
 ]
@@ -219,7 +226,15 @@ const fetchContinentCountries = async (continentId: string) => {
   return payload.countries
 }
 
-const buildCountryFeatureCollection = (countryMetrics: CountryMetric[]) => {
+const getDisplayUsers = (metric: CountryMetric, gameFilter: GameFilter) => {
+  if (gameFilter === 'all') {
+    return metric.total_users
+  }
+
+  return metric.games.find((game) => game.id === gameFilter)?.users ?? 0
+}
+
+const buildCountryFeatureCollection = (countryMetrics: CountryMetric[], gameFilter: GameFilter) => {
   const metricsById = new Map(countryMetrics.map((entry) => [entry.id, entry]))
 
   const features = seedCountryGeoJson.features
@@ -227,6 +242,7 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[]) => {
     .map((feature) => {
       const countryId = String(feature.properties?.id ?? '')
       const metric = metricsById.get(countryId)
+      const displayUsers = metric ? getDisplayUsers(metric, gameFilter) : 0
 
       return {
         ...feature,
@@ -235,6 +251,7 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[]) => {
           id: countryId,
           name: metric?.name ?? String(feature.properties?.name ?? countryId),
           total_users: metric?.total_users ?? 0,
+          display_users: displayUsers,
           confidence: metric?.confidence ?? 0,
         },
       }
@@ -246,10 +263,43 @@ const buildCountryFeatureCollection = (countryMetrics: CountryMetric[]) => {
   }
 }
 
-export function WorldMap() {
+const applyCountryColoring = (map: MapLibreMap, countryMetrics: CountryMetric[], gameFilter: GameFilter) => {
+  const countrySource = map.getSource('countries') as GeoJSONSource | undefined
+  countrySource?.setData(buildCountryFeatureCollection(countryMetrics, gameFilter) as any)
+
+  const nonZeroUsers = countryMetrics
+    .map((entry) => getDisplayUsers(entry, gameFilter))
+    .filter((value) => value > 0)
+  const minUsers = nonZeroUsers.length ? Math.min(...nonZeroUsers) : 0
+  const maxUsers = nonZeroUsers.length ? Math.max(...nonZeroUsers) : 1
+  const safeMaxUsers = maxUsers <= minUsers ? minUsers + 1 : maxUsers
+
+  map.setPaintProperty('countries-fill', 'fill-color', [
+    'case',
+    ['==', ['get', 'display_users'], 0],
+    'rgba(0, 0, 0, 0)',
+    userColorScale(minUsers, safeMaxUsers),
+  ] as any)
+}
+
+type WorldMapProps = {
+  gameFilter: GameFilter
+}
+
+export function WorldMap({ gameFilter }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
+  const countryMetricsRef = useRef<CountryMetric[]>([])
+  const gameFilterRef = useRef(gameFilter)
   const [isCountryZoom, setIsCountryZoom] = useState(false)
+
+  useEffect(() => {
+    gameFilterRef.current = gameFilter
+    const map = mapRef.current
+    if (map?.isStyleLoaded() && countryMetricsRef.current.length) {
+      applyCountryColoring(map, countryMetricsRef.current, gameFilter)
+    }
+  }, [gameFilter])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -390,21 +440,8 @@ export function WorldMap() {
         map.once('moveend', () => {
           countriesRequest
             .then((countryMetrics) => {
-              const countrySource = map.getSource('countries') as GeoJSONSource | undefined
-              const countryFeatureCollection = buildCountryFeatureCollection(countryMetrics)
-              countrySource?.setData(countryFeatureCollection as any)
-
-              const nonZeroUsers = countryMetrics.map((entry) => entry.total_users).filter((value) => value > 0)
-              const minUsers = nonZeroUsers.length ? Math.min(...nonZeroUsers) : 0
-              const maxUsers = nonZeroUsers.length ? Math.max(...nonZeroUsers) : 1
-              const safeMaxUsers = maxUsers <= minUsers ? minUsers + 1 : maxUsers
-
-              map.setPaintProperty('countries-fill', 'fill-color', [
-                'case',
-                ['==', ['get', 'total_users'], 0],
-                'rgba(0, 0, 0, 0)',
-                userColorScale(minUsers, safeMaxUsers),
-              ] as any)
+              countryMetricsRef.current = countryMetrics
+              applyCountryColoring(map, countryMetrics, gameFilterRef.current)
 
               map.setLayoutProperty('continents-fill', 'visibility', 'none')
               map.setLayoutProperty('countries-fill', 'visibility', 'visible')
