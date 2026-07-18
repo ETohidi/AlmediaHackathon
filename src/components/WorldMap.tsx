@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { buildSeedCountryGeoJson } from '../lib/countryGeometry'
-import { userColorScale } from '../lib/colorScale'
+import { userConfidenceColorScale } from '../lib/colorScale'
 
 const WORLD_BOUNDS: [[number, number], [number, number]] = [
   [-170, -60],
@@ -46,7 +46,7 @@ type CountryMetric = {
   }>
 }
 
-export type GameFilter = 'all' | 'word-collect' | 'office-cat' | 'monopoly-go'
+export type GameFilter = 'all' | string
 
 type GeoJsonFeature = {
   type: 'Feature'
@@ -106,18 +106,13 @@ const getBoundsFromGeometry = (geometry: GeoJsonFeature['geometry']) => {
   }
 }
 
-const continentFillColorExpression: any = [
-  'case',
-  ['==', ['get', 'total_users'], 0],
-  'rgba(0, 0, 0, 0)',
-  userColorScale(69000, 941000),
-]
+const continentFillColorExpression: any = 'rgba(0, 0, 0, 0)'
 
 const continentFillOpacityExpression: any = [
   'case',
   ['==', ['get', 'total_users'], 0],
   0,
-  ['interpolate', ['linear'], ['coalesce', ['get', 'confidence'], 0.3], 0.3, 0.35, 0.65, 0.72, 1, 1],
+  1,
 ]
 
 const continentOutlineColor = '#4b5563'
@@ -126,7 +121,7 @@ const countryFillOpacityExpression: any = [
   'case',
   ['==', ['get', 'display_users'], 0],
   0,
-  ['interpolate', ['linear'], ['coalesce', ['get', 'confidence'], 0.3], 0.3, 0.35, 0.65, 0.72, 1, 1],
+  1,
 ]
 
 const seedCountryGeoJson = buildSeedCountryGeoJson()
@@ -278,7 +273,7 @@ const applyCountryColoring = (map: MapLibreMap, countryMetrics: CountryMetric[],
     'case',
     ['==', ['get', 'display_users'], 0],
     'rgba(0, 0, 0, 0)',
-    userColorScale(minUsers, safeMaxUsers),
+    userConfidenceColorScale(minUsers, safeMaxUsers, 'display_users'),
   ] as any)
 }
 
@@ -475,6 +470,19 @@ export function WorldMap({ gameFilter }: WorldMapProps) {
         .then(({ enrichedContinents, continentLabels }) => {
           const continentSource = map.getSource('continents') as GeoJSONSource | undefined
           continentSource?.setData(enrichedContinents as any)
+
+          const nonZeroUsers = enrichedContinents.features
+            .map((feature) => Number(feature.properties.total_users ?? 0))
+            .filter((value) => value > 0)
+          const minUsers = nonZeroUsers.length ? Math.min(...nonZeroUsers) : 0
+          const maxUsers = nonZeroUsers.length ? Math.max(...nonZeroUsers) : 1
+          const safeMaxUsers = maxUsers <= minUsers ? minUsers + 1 : maxUsers
+          map.setPaintProperty('continents-fill', 'fill-color', [
+            'case',
+            ['==', ['get', 'total_users'], 0],
+            'rgba(0, 0, 0, 0)',
+            userConfidenceColorScale(minUsers, safeMaxUsers),
+          ] as any)
 
           const labelSource = map.getSource('continent-labels') as GeoJSONSource | undefined
           labelSource?.setData(continentLabels as any)

@@ -1,4 +1,75 @@
 {
+  "dataset": {
+    "as_of": "2026-06-17",
+    "researched_at": "2026-07-18T14:00:00.000Z",
+    "global_registered_users": 80000000,
+    "global_registered_users_status": "reported",
+    "reported_country_coverage": "100+",
+    "named_markets_in_dataset": 15,
+    "market_coverage_status": "partial_public_list",
+    "country_total_users_status": "estimated",
+    "country_game_users_status": "modeled_estimate",
+    "methodology": "Country values are relative footprint estimates calibrated from Almedia's published market rankings. Country-game values are allocated from those country totals with a documented regional game-mix model informed by confirmed campaigns and published geographic evidence. They are not reported customer counts."
+  },
+  "sources": [
+    {
+      "id": "almedia-users-2026-06",
+      "title": "Freecash Makes Its Comeback on the iOS App Store, Rewarding Over 80 Million Users and Counting",
+      "publisher": "Almedia",
+      "published_at": "2026-06-17",
+      "url": "https://almedia.co/insights/newsroom/freecash-makes-its-comeback-on-the-ios-app-store-now-rewarding-over-80-million-users"
+    },
+    {
+      "id": "almedia-rankings-2026-02",
+      "title": "Almedia's Freecash app tops global iOS App Store charts",
+      "publisher": "Almedia",
+      "published_at": "2026-02-03",
+      "url": "https://almedia.co/insights/newsroom/almedia%E2%80%99s-freecash-app-tops-global-ios-app-store-charts-as-rewarded-platforms-go-mainstream"
+    },
+    {
+      "id": "word-collect-case-study",
+      "title": "Super Free Games x Almedia: Word Collect Scales 20x Internationally",
+      "publisher": "Almedia",
+      "url": "https://almedia.co/insights/case-studies/super-free-games-word-collect"
+    },
+    {
+      "id": "office-cat-case-study",
+      "title": "Treeplla Doubles ROAS & Boosts Retention by 133% with Almedia",
+      "publisher": "Almedia",
+      "url": "https://almedia.co/insights/case-studies/treeplla-office-cat"
+    },
+    {
+      "id": "match-masters-case-study",
+      "title": "Candivore x Almedia: Match Masters Funnel Doubles ROAS",
+      "publisher": "Almedia",
+      "url": "https://almedia.co/insights/case-studies/candivore-match-masters"
+    },
+    {
+      "id": "animals-coins-case-study",
+      "title": "How Innplay Labs outperformed D30 retention benchmarks by 70%",
+      "publisher": "Almedia",
+      "url": "https://almedia.co/insights/case-studies/innplay-labs-animals-coins"
+    },
+    {
+      "id": "word-farm-case-study",
+      "title": "How Mad Brain boosted ROAS by 50% with Almedia",
+      "publisher": "Almedia",
+      "url": "https://almedia.co/insights/case-studies/mad-brain-games-word-farm-adventure"
+    },
+    {
+      "id": "jewels-jungle-case-study",
+      "title": "How Superbox drove 2x higher D30 ROAS and retention with Almedia",
+      "publisher": "Almedia",
+      "url": "https://almedia.co/insights/case-studies/superbox-jewels-jungle"
+    },
+    {
+      "id": "monopoly-go-freecash-offer",
+      "title": "Is Monopoly Go Legit? I Downloaded the Game and Tested it",
+      "publisher": "Freecash",
+      "published_at": "2026-06-22",
+      "url": "https://freecash.com/academy/en/offers/is-monopoly-go-legit"
+    }
+  ],
   "continents": [
     { "id": "europe", "name": "Europe", "label_lng": 16, "label_lat": 54 },
     { "id": "north-america", "name": "North America", "label_lng": -101, "label_lat": 45 },
@@ -8,28 +79,74 @@
     { "id": "africa", "name": "Africa", "label_lng": 20, "label_lat": 5 }
   ],
   "countries": [
-    { "id": "DE", "name": "Germany", "continent_id": "europe", "total_users": 180000, "confidence": 0.92, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "GB", "name": "United Kingdom", "continent_id": "europe", "total_users": 155000, "confidence": 0.9, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "NL", "name": "Netherlands", "continent_id": "europe", "total_users": 82000, "confidence": 0.88, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "FR", "name": "France", "continent_id": "europe", "total_users": 140000, "confidence": 0.87, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "AT", "name": "Austria", "continent_id": "europe", "total_users": 54000, "confidence": 0.84, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "IT", "name": "Italy", "continent_id": "europe", "total_users": 123000, "confidence": 0.86, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "BE", "name": "Belgium", "continent_id": "europe", "total_users": 61000, "confidence": 0.85, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "SE", "name": "Sweden", "continent_id": "europe", "total_users": 70000, "confidence": 0.83, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "PL", "name": "Poland", "continent_id": "europe", "total_users": 76000, "confidence": 0.82, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "US", "name": "United States", "continent_id": "north-america", "total_users": 260000, "confidence": 0.91, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "CA", "name": "Canada", "continent_id": "north-america", "total_users": 98000, "confidence": 0.89, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "JP", "name": "Japan", "continent_id": "asia", "total_users": 112000, "confidence": 0.88, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "KR", "name": "South Korea", "continent_id": "asia", "total_users": 86000, "confidence": 0.86, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "CN", "name": "China", "continent_id": "asia", "total_users": 174000, "confidence": 0.8, "last_refreshed": "2026-07-18T10:00:00.000Z" },
-    { "id": "AU", "name": "Australia", "continent_id": "oceania", "total_users": 69000, "confidence": 0.84, "last_refreshed": "2026-07-18T10:00:00.000Z" }
+    { "id": "DE", "name": "Germany", "continent_id": "europe", "total_users": 180000, "confidence": 0.62, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "GB", "name": "United Kingdom", "continent_id": "europe", "total_users": 155000, "confidence": 0.62, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "NL", "name": "Netherlands", "continent_id": "europe", "total_users": 82000, "confidence": 0.6, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "FR", "name": "France", "continent_id": "europe", "total_users": 140000, "confidence": 0.6, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "AT", "name": "Austria", "continent_id": "europe", "total_users": 54000, "confidence": 0.55, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "IT", "name": "Italy", "continent_id": "europe", "total_users": 123000, "confidence": 0.52, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "BE", "name": "Belgium", "continent_id": "europe", "total_users": 61000, "confidence": 0.52, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "SE", "name": "Sweden", "continent_id": "europe", "total_users": 70000, "confidence": 0.5, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "PL", "name": "Poland", "continent_id": "europe", "total_users": 76000, "confidence": 0.48, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "US", "name": "United States", "continent_id": "north-america", "total_users": 260000, "confidence": 0.62, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "CA", "name": "Canada", "continent_id": "north-america", "total_users": 98000, "confidence": 0.58, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "JP", "name": "Japan", "continent_id": "asia", "total_users": 112000, "confidence": 0.52, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "KR", "name": "South Korea", "continent_id": "asia", "total_users": 86000, "confidence": 0.45, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "CN", "name": "China", "continent_id": "asia", "total_users": 174000, "confidence": 0.42, "last_refreshed": "2026-07-18T10:00:00.000Z" },
+    { "id": "AU", "name": "Australia", "continent_id": "oceania", "total_users": 69000, "confidence": 0.55, "last_refreshed": "2026-07-18T10:00:00.000Z" }
   ],
   "games": [
-    { "id": "word-collect", "name": "Word Collect" },
-    { "id": "office-cat", "name": "Office Cat" },
-    { "id": "monopoly-go", "name": "Monopoly GO!" }
+    { "id": "word-collect", "name": "Word Collect", "evidence_status": "confirmed_campaign", "source_ids": ["word-collect-case-study"] },
+    { "id": "office-cat", "name": "Office Cat", "evidence_status": "confirmed_campaign", "source_ids": ["office-cat-case-study"] },
+    { "id": "monopoly-go", "name": "Monopoly GO!", "evidence_status": "confirmed_offer", "source_ids": ["monopoly-go-freecash-offer"] },
+    { "id": "match-masters", "name": "Match Masters", "evidence_status": "confirmed_campaign", "source_ids": ["match-masters-case-study"] },
+    { "id": "animals-and-coins", "name": "Animals & Coins", "evidence_status": "confirmed_campaign", "source_ids": ["animals-coins-case-study"] },
+    { "id": "word-farm-adventure", "name": "Word Farm Adventure", "evidence_status": "confirmed_campaign", "source_ids": ["word-farm-case-study"] },
+    { "id": "jewels-jungle", "name": "Jewels Jungle", "evidence_status": "confirmed_campaign", "source_ids": ["jewels-jungle-case-study"] }
   ],
-  "country_game": [
+  "country_game_model": {
+    "id": "regional-game-mix-v1",
+    "description": "Modeled share of each country's estimated user footprint. Shares vary by continent and sum to 1. Values are informed by confirmed Almedia campaigns, known campaign geographies, and broad genre-market fit; they are not observed Almedia counts.",
+    "weights_by_continent": {
+      "europe": {
+        "word-collect": 0.2,
+        "office-cat": 0.14,
+        "monopoly-go": 0.18,
+        "match-masters": 0.17,
+        "animals-and-coins": 0.11,
+        "word-farm-adventure": 0.11,
+        "jewels-jungle": 0.09
+      },
+      "north-america": {
+        "word-collect": 0.18,
+        "office-cat": 0.12,
+        "monopoly-go": 0.23,
+        "match-masters": 0.16,
+        "animals-and-coins": 0.14,
+        "word-farm-adventure": 0.1,
+        "jewels-jungle": 0.07
+      },
+      "asia": {
+        "word-collect": 0.15,
+        "office-cat": 0.2,
+        "monopoly-go": 0.14,
+        "match-masters": 0.15,
+        "animals-and-coins": 0.11,
+        "word-farm-adventure": 0.11,
+        "jewels-jungle": 0.14
+      },
+      "oceania": {
+        "word-collect": 0.18,
+        "office-cat": 0.14,
+        "monopoly-go": 0.2,
+        "match-masters": 0.16,
+        "animals-and-coins": 0.13,
+        "word-farm-adventure": 0.11,
+        "jewels-jungle": 0.08
+      }
+    }
+  },
+  "country_game_step7_seed_archive": [
     { "country_id": "DE", "game_id": "word-collect", "users": 65000 },
     { "country_id": "DE", "game_id": "office-cat", "users": 52000 },
     { "country_id": "DE", "game_id": "monopoly-go", "users": 63000 },

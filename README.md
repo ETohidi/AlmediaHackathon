@@ -1,32 +1,45 @@
-# React + TypeScript + Vite
+# MetaGame
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+MetaGame is an interactive digital twin of Almedia's global rewarded user-acquisition footprint. It currently visualizes an evidence-aware local dataset and is designed to support an agent-maintained refresh loop in later steps.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Install dependencies once:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Start the API:
+
+```bash
+npm run start:server
+```
+
+In another terminal, start the frontend:
+
+```bash
+npm run dev
+```
+
+Open the local URL printed by Vite, normally `http://localhost:5173`.
+
+## Current API
+
+- `GET /health`
+- `GET /twin/meta` — dataset methodology and source catalog
+- `GET /twin/games` — sourced game catalog
+- `GET /twin/validation` — reconciliation of country, game, and continent totals
+- `GET /twin/continents` — country-derived continent aggregates
+- `GET /twin/countries?continent=<id>` — country and per-game estimates
+
+## Data integrity
+
+Public sources do not disclose exact Freecash users by country and game. The API therefore labels the current map values as estimates and labels unsupported geography as missing. Reported facts, source URLs, methodology, and visual encoding rules are documented in [DATA_SOURCES.md](DATA_SOURCES.md).
+
+## Verification
+
+```bash
+npm run build
+npm run lint
+```

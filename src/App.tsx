@@ -1,16 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { WorldMap } from './components/WorldMap'
 import type { GameFilter } from './components/WorldMap'
 
-const games: Array<{ id: GameFilter; name: string }> = [
-  { id: 'all', name: 'All' },
-  { id: 'word-collect', name: 'Word Collect' },
-  { id: 'office-cat', name: 'Office Cat' },
-  { id: 'monopoly-go', name: 'Monopoly GO!' },
-]
+type Game = { id: string; name: string }
 
 function App() {
   const [gameFilter, setGameFilter] = useState<GameFilter>('all')
+  const [games, setGames] = useState<Game[]>([])
+
+  useEffect(() => {
+    fetch('/twin/games')
+      .then((response) => {
+        if (!response.ok) throw new Error('Failed to load games')
+        return response.json() as Promise<Game[]>
+      })
+      .then(setGames)
+      .catch(console.error)
+  }, [])
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-[#0d0d0f]">
@@ -23,6 +29,7 @@ function App() {
           onChange={(event) => setGameFilter(event.target.value as GameFilter)}
           className="rounded border border-slate-600/70 bg-slate-900/90 px-2.5 py-1.5 text-sm text-slate-100 outline-none"
         >
+          <option value="all">All</option>
           {games.map((game) => (
             <option key={game.id} value={game.id}>
               {game.name}
